@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plainspoken Responses"
+  short_description: "Clear, friendly replies for people"
+  default_prompt: "Use $plainspoken-responses for every reply you write to a user."

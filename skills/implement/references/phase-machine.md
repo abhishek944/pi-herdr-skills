@@ -1,0 +1,156 @@
+# Implement skill — recursive phase machine
+
+The run and every descendant are represented in `state.json`. Every agent begins each turn by reading its task and current root-wide limits.
+
+## Root phases
+
+```text
+bootstrap → plan → execute → integrate → review → complete
+     ↘         ↘        ↘           ↘
+                    blocked
+```
+
+Valid transitions are enforced by the state helper:
+
+- `bootstrap → plan | blocked`
+- `plan → execute | blocked`
+- `execute → integrate | blocked`
+- `integrate → review | execute | blocked`
+- `review → complete | integrate | blocked`
+- `blocked → plan | execute | integrate | review`
+
+`complete` is reached only through the certified `complete-run` event.
+
+## Task states and phases
+
+```text
+planning → queued → launching → working ↔ waiting ↔ integrating
+    ↘          ↘          ↘          ↘           ↘
+                          blocked → working
+                             ↘
+                         cancelling → cancelled
+
+working/integrating → done (through parent acceptance)
+```
+
+Blocked work returns through `working` before integration. The helper enforces valid transitions and status/phase pairs. Settled tasks cannot be reopened. Create a new todo or replacement task when fresh work is required.
+
+## Required task loop
+
+```text
+read state and own task
+→ authenticate with the task capability
+→ create/update todos before other work
+→ inspect dependencies and root limits
+→ work directly OR create independent logical children
+→ bind each child to a catalog model
+→ atomically reserve a root-wide slot
+→ launch, prompt, and monitor children
+→ collect structured results
+→ close or preserve exact run-owned resources
+→ inspect actual changed files and resolve collisions
+→ complete todos and record evidence
+→ return the result
+→ parent records observed runtime settlement and atomically accepts the blocker-free task with verification evidence
+```
+
+Todos are maintained throughout the task, never reconstructed at the end.
+
+## Credentials and coordinator lease
+
+- The root uses the owner token as its task capability plus the active coordinator lease ID.
+- Each child receives only the raw capability returned with its task creation.
+- State stores capability hashes, never raw credentials.
+- A caller-supplied task ID without its capability has no authority.
+- A different root coordinator cannot take over an unexpired lease.
+- Root operations renew the matching lease. Resume refuses unreconciled live runtime state.
+
+## Recursive launch rules
+
+1. `allow_subagents` must be true on the parent.
+2. Delegation uses independent outcomes, not folders. New files and folders are allowed.
+3. A parent may create at most six immediate children. Immutable hard ceilings also cover depth, total tasks, active agents, and one launch attempt per task.
+4. Descendant contracts are parent-owned. Children cannot rewrite or widen them.
+5. The parent follows the global `model-routing-policy`, chooses a task class, binds the Pi-global versioned model catalog by digest, verifies availability, and records the selected provider/model/thinking settings before launch. Any resolution or launch failure blocks the task after owned resources are cleaned up.
+6. Adding a ready child and reserving its slot is one atomic event. Dependency-blocked children are queued without a slot.
+7. If no slot is available, do not wait indefinitely while holding a parent slot. Keep work in the current task, reduce decomposition, or settle existing children first.
+8. The child receives the global `implement` skill, feature name, state location, task ID, raw task capability, and logical contract. Its first mutation creates todos.
+9. Small or cohesive children are leaves. Maximum-depth and review tasks are always leaves.
+10. Only the root performs final combined integration and review.
+
+## Herdr lifecycle at every level
+
+Before controlling Herdr, read the global Herdr skill and verify eligibility.
+
+For each wave, the delegating task:
+
+1. reads its recorded resources and root-wide slots;
+2. records distinct tab and first-child root-pane intents, runtime names, and response artifacts before creating the dedicated tab;
+3. injects only the first child's task capability through tab creation, saves the full Herdr JSON response for the tab intent, copies it to the distinct root-pane artifact, parses the returned IDs, and binds the tab and root pane separately;
+4. assigns the returned root pane to the first child, then creates and binds one split pane for each remaining child only, so the tab has exactly one pane per child and no unused coordinator pane;
+5. injects only the matching child's task capability into each named pane environment and uses `herdr pane rename` to give every pane a distinct responsibility name before agent startup; pane names are mandatory;
+6. starts all agents concurrently through Pi in their named panes using Herdr's mandatory `--kind pi`, passes the recorded provider/model/thinking settings explicitly, and captures immutable agent-session provenance with a bounded deadline;
+7. saves each complete start response, records the actual launched provider/model/thinking settings, and verifies all three against the preserved model-routing resolution before prompting;
+8. after all Pi agents start, launches one `herdr agent prompt ... --wait` process per child concurrently with its complete handoff;
+9. while those processes are still running, observes each agent enter working state and immediately records productive-prompt evidence through the dedicated write-once event;
+10. only after dispatch is durably recorded, joins the concurrent prompt-and-wait processes with bounded deadlines; overdue work enters timeout cancellation and cannot settle successfully;
+11. stores complete child output and digest, then reconciles it with real changes;
+12. records the observed child runtime as settled, then applies `accept-task` with verification evidence; acceptance marks the child done and releases its slot atomically;
+13. closes or preserves exact recorded resources after outputs and descendant state are durable.
+
+A child may create a separate tab for descendants, but never controls or closes the tab containing itself. The resource creator owns normal cleanup. The root may settle an exact descendant resource during recovery.
+
+## Partial launch and prompt recovery
+
+- If no child receives productive work, close recorded resources, confirm the runtime stopped, release slots, and block the failed tasks.
+- If some children receive productive work, never reset productive state or duplicate them. Monitor accepted children and block the failed tasks after cleanup.
+- `unknown`, missing output, and approval prompts are not completion.
+- Never start another runtime after a failed launch.
+
+## Dependencies and collisions
+
+Dependencies are uncommon and explicit. A queued task launches only after dependencies are done. Cycles are checked across dependency and parent-waits-for-child edges, so a child cannot depend on an ancestor waiting for it.
+
+If overlap is discovered after launch, the child becomes blocked. Its parent may then add dependencies, narrow inputs or boundaries, serialize work, or integrate directly.
+
+Tasks are not assigned folders in advance. After children settle, the parent compares their reported changed files and the real combined changes. Every file or behavioral collision is recorded as open, resolved with evidence, and rechecked. Last-writer-wins is never accepted silently.
+
+## Two-phase cancellation
+
+Cancellation proceeds deepest-first without freeing capacity early:
+
+1. `cancel-subtree` records a reason and parent disposition, moves unfinished tasks to `cancelling`, and requests runtime cancellation.
+2. Slots remain occupied.
+3. Stop descendants and record confirmed stopped/settled runtime state.
+4. Collect partial output.
+5. Close resources or preserve them with a blocker reason.
+6. `finalize-cancellation` releases one task's slot and marks it cancelled.
+7. Finalize the parent only after every child settles.
+
+A cancellation request alone is not a settled task.
+
+## Resume and recovery
+
+Validate the state, authenticate the owner token and lease, and compare every active slot and live resource with Herdr runtime state.
+
+Resume healthy agents. If an agent is unhealthy or runtime ownership cannot be proven, preserve owned evidence and block; never replace the agent. The root can settle descendant resources only by exact recorded task and resource IDs.
+
+An expired takeover uses a fresh lease and coordinator instance. If active slots, live resources, or planned intents remain, state persists a reconciliation gate. Intent binding/failure, runtime inspection, cleanup, and cancellation remain available; launches and ordinary work stay disabled until every intent is bound or failed, every slot/runtime is classified, and reconciliation evidence is recorded.
+
+## Root integration and review
+
+The root:
+
+1. waits for every implementation descendant to settle or records how cancelled outcomes were covered;
+2. requires task-reported changed files to equal the worktree delta from the initial snapshot;
+3. derives sibling overlaps and resolves every collision with rerun evidence;
+4. runs combined automated checks and required visual verification, then writes the user-owned live-test handoff; it runs live interactive end-to-end testing only when the latest request explicitly asks;
+5. fingerprints the final live change and writes the evidence index;
+6. launches fresh review instances that did not contribute to implementation and were not used in earlier review waves;
+7. records reviewer instance provenance, wave, fingerprint, and output paths;
+8. places fingerprint, wave, reviewer, and finding-ID markers in reports and records structured findings;
+9. fixes accepted findings and repeats integration and review on a new fingerprint;
+10. runs final validation with `--certify`;
+11. immediately applies `complete-run` with no intervening mutation.
+
+Certification hashes distinct reports and evidence and checks the live fingerprint and mode-aware worktree delta while state is locked. `complete-run` checks them at entry and again as its final operation before completion. Any mismatch or state change requires fresh validation and review as applicable.

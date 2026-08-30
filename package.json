@@ -1,0 +1,19 @@
+{
+  "name": "pi-herdr-skills",
+  "version": "0.1.0",
+  "description": "Reusable Pi skills for Herdr-backed planning, implementation, review, and visual workflows.",
+  "private": true,
+  "keywords": [
+    "pi-skills",
+    "herdr",
+    "agent-skills"
+  ],
+  "license": "SEE LICENSE IN THIRD_PARTY_NOTICES.md",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/abhishek944/pi-herdr-skills.git"
+  },
+  "scripts": {
+    "check": "bash scripts/check-repo.sh"
+  }
+}

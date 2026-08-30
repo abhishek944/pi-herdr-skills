@@ -1,0 +1,261 @@
+{
+  "snapshot": "2026-08-30",
+  "skills": 13,
+  "files": [
+    {
+      "path": "skills/agent-review/SKILL.md",
+      "sha256": "1b9a74c14cdf3de3eab42d3c94492ebc233281e1a524e07b9b362b398a4b0204",
+      "executable": false
+    },
+    {
+      "path": "skills/agent-review/scripts/review-fingerprint.sh",
+      "sha256": "d3385b320d63231872fd057a2f187ab8ccacff30cac3f05df816ca4aca2594fb",
+      "executable": true
+    },
+    {
+      "path": "skills/browser-use/SKILL.md",
+      "sha256": "7c6479057d1eb9f815a0e2258114e72897127cc5f434f6df5cae610685a39ed6",
+      "executable": false
+    },
+    {
+      "path": "skills/browser-use/references/cdp-python.md",
+      "sha256": "4fc789c98258020e9d1933819f48bf2e5c5d3b664a4cd006b76d64d83c8858ac",
+      "executable": false
+    },
+    {
+      "path": "skills/browser-use/references/multi-session.md",
+      "sha256": "e68248c9eb4029a9fc90ea1ff980bbe90de5fa42319138613c42d13d0373ffef",
+      "executable": false
+    },
+    {
+      "path": "skills/commit-and-merge/SKILL.md",
+      "sha256": "a1870fcf44148fe73afc1f5a22691155e1986a521a57ada2ea998497047cf804",
+      "executable": false
+    },
+    {
+      "path": "skills/design-council/SKILL.md",
+      "sha256": "8a5da5daf6a9c5bbdf32162e39a740e4bf70a4e5d682ce940f1467c5b4697adb",
+      "executable": false
+    },
+    {
+      "path": "skills/design-council/references/protocols.md",
+      "sha256": "da1e031a8b5503c54e26748a74834f9519494d05a367f2f516f052dfc9e0bb50",
+      "executable": false
+    },
+    {
+      "path": "skills/discuss/SKILL.md",
+      "sha256": "8ab02c6d2faba7c44c60d3231149add5f5a5ae22c1796eba36bd65bf164015f0",
+      "executable": false
+    },
+    {
+      "path": "skills/grill-me/SKILL.md",
+      "sha256": "2181b1417ecee46d849ceb04c05fd0830e712889e65a10472b27eebc7e335897",
+      "executable": false
+    },
+    {
+      "path": "skills/grill-me/references/decision-tree.md",
+      "sha256": "93baeee8776e2c053585682a501827e19c25b1464eaac1c7a92bea3de55e1a52",
+      "executable": false
+    },
+    {
+      "path": "skills/grill-me/scripts/generate-question.mjs",
+      "sha256": "854973992b14d95d96665671bc186f8e1073f452ff5201a5517a8485e6eb0214",
+      "executable": true
+    },
+    {
+      "path": "skills/grill-me/scripts/preflight-question.mjs",
+      "sha256": "c54ce58e6847d940d6eeeb3be62d356709dc85d2d013e668fab17b2cc938a86d",
+      "executable": true
+    },
+    {
+      "path": "skills/grill-me/scripts/save-server.mjs",
+      "sha256": "5017a6283d779e05cafeaad8f3304b5a307870030275429e138bd74ca7c0f4ca",
+      "executable": true
+    },
+    {
+      "path": "skills/grill-me/scripts/session-path.mjs",
+      "sha256": "bc692d0d6548ebe4b3b6f306501c686e39b6d3076d86c9477460984591076f2d",
+      "executable": true
+    },
+    {
+      "path": "skills/grill-me/scripts/stop-server.mjs",
+      "sha256": "b3fb2a68c2e3a08954c0447ac1bba1945db6e8ed3bc8a444829820121eae0870",
+      "executable": true
+    },
+    {
+      "path": "skills/grill-me/scripts/wait-for-response.mjs",
+      "sha256": "187def9ffc9898e1f46a5c11fb785e6e69a5e47d3d93bbe604f0ac17cca101d1",
+      "executable": true
+    },
+    {
+      "path": "skills/herdr/SKILL.md",
+      "sha256": "98d25cfb19404df5632c0468ec9b094fa99c3108ed2e5f621bdf8e0e1429dc51",
+      "executable": false
+    },
+    {
+      "path": "skills/implement/SKILL.md",
+      "sha256": "e4c69136f8db1c69fcf71c69b1fceed1e7d3c0c3a27f90b721ca1c1965e245f7",
+      "executable": false
+    },
+    {
+      "path": "skills/implement/references/phase-machine.md",
+      "sha256": "f5d5c55676aa0a4c1700c25a4079436163f95163853482fdc31e3704fc81541b",
+      "executable": false
+    },
+    {
+      "path": "skills/implement/references/state-schema.md",
+      "sha256": "5dab51e1985503823d646efde20474e2da6fc4f60786b06dbc99461e091768be",
+      "executable": false
+    },
+    {
+      "path": "skills/implement/references/visual-contract.md",
+      "sha256": "8d6bffb499fa2359dc3e225e371d8804e111097d124e510c4c0ce05a3ed0616e",
+      "executable": false
+    },
+    {
+      "path": "skills/implement/references/worker-handoff-template.md",
+      "sha256": "56173d1acff51f99b19c2943d39220c2ffe2ee80963ae72fc63307de32981253",
+      "executable": false
+    },
+    {
+      "path": "skills/implement/scripts/init-state.sh",
+      "sha256": "40e223e2819bba12e90ea07137ef36d41b8b3bdb97aaaeed79cd6eced35b1b43",
+      "executable": true
+    },
+    {
+      "path": "skills/implement/scripts/state-store.py",
+      "sha256": "d3e26193eaed27780592eca386e16ab940aaa6b6ec64f2cce4c7b6202429a990",
+      "executable": true
+    },
+    {
+      "path": "skills/implement/scripts/validate-integration-review.sh",
+      "sha256": "d8dff0aac9fb9b5f2970e3cf95119df9ba878a1da2433847d3e8213fadf8393b",
+      "executable": true
+    },
+    {
+      "path": "skills/implement/scripts/validate-plan.sh",
+      "sha256": "a99bb4169e90e9fc41ab71db21e4f539ce9b9be8bd972f5b9644888d66537b3c",
+      "executable": true
+    },
+    {
+      "path": "skills/model-routing-policy/SKILL.md",
+      "sha256": "097a10840a261ca1b7e8ac4054de4c593c09cdab4f83add7bdf2ff51d98ce8f5",
+      "executable": false
+    },
+    {
+      "path": "skills/model-routing-policy/models.json",
+      "sha256": "050d81fbb9fecef96fe9b6ab893f2262b2602dc143a3611c0d3d7c460c2aad0b",
+      "executable": false
+    },
+    {
+      "path": "skills/model-routing-policy/scripts/model-routing.py",
+      "sha256": "5bce2f6d068c04ce28b55bee7084a956cb37d0dee297165d765b3695d4e0b65a",
+      "executable": true
+    },
+    {
+      "path": "skills/plainspoken-responses/SKILL.md",
+      "sha256": "510ac46a8ce39af62bbfb57507df75e69424f947191c566ec8a09a2f5d9581d6",
+      "executable": false
+    },
+    {
+      "path": "skills/plainspoken-responses/agents/openai.yaml",
+      "sha256": "2efbbe9b366e1232048cb9e5b2fd26c7dce9aeae0d7edb2163e2965e3d3b0a97",
+      "executable": false
+    },
+    {
+      "path": "skills/read-flows/SKILL.md",
+      "sha256": "3b8ab3ea806aba1b4a6edf279d1aa3aaf52edea7278118696129cc149d5e6d2d",
+      "executable": false
+    },
+    {
+      "path": "skills/ui-ux-grill-me/SKILL.md",
+      "sha256": "a86e6791f272e1c6274ca3d1a9b5118ae8ca29ee0b357e496317cbfd7dd30f82",
+      "executable": false
+    },
+    {
+      "path": "skills/ui-ux-grill-me/references/visual-contract.md",
+      "sha256": "00bc4f76a65d2ce7d1ca5f1cf5c800c2c11663f979d09c5fa799bd7ca09c154a",
+      "executable": false
+    },
+    {
+      "path": "skills/ui-ux-grill-me/references/visual-decision-tree.md",
+      "sha256": "283027d3c852b815f3a45811d9c00377790c9e226cb312dcce552dce5e152d2a",
+      "executable": false
+    },
+    {
+      "path": "skills/ui-ux-grill-me/scripts/capture-viewport.mjs",
+      "sha256": "53695a4c754df1a0d5ab355d2dc160096041e647c0275674577a2f078c92e99d",
+      "executable": true
+    },
+    {
+      "path": "skills/ui-ux-grill-me/scripts/generate-comparison.mjs",
+      "sha256": "b1c55cfbcd2a21cb825ce424c52ce839f8ef6c54ce98183562fa2835bc19699a",
+      "executable": true
+    },
+    {
+      "path": "skills/ui-ux-grill-me/scripts/preflight-comparison.mjs",
+      "sha256": "456b43073967784ef81512df9264e86866fb99068fe8b143aa8001543b676758",
+      "executable": true
+    },
+    {
+      "path": "skills/ui-ux-grill-me/scripts/save-server.mjs",
+      "sha256": "1968cc804da940da2c3c591d34540d5969c1819609a035904f2adf10130ca8e1",
+      "executable": true
+    },
+    {
+      "path": "skills/ui-ux-grill-me/scripts/wait-for-selection.mjs",
+      "sha256": "96f2312f873fbf9e4e7b73e7303a80c0d9758470b07dc9fcbe7e227ec5beb982",
+      "executable": true
+    },
+    {
+      "path": "skills/ui-ux-grill-me/templates/example-options.json",
+      "sha256": "2d4f1c1aa987a863a71c62a318f227d673bd2f4d106b33de525a3fe033d28b39",
+      "executable": false
+    },
+    {
+      "path": "skills/visual-explainer/SKILL.md",
+      "sha256": "0073e2b8ce10ee9f97c491db3e6fc61ee5c798bc64d684ade8c424c6d9632836",
+      "executable": false
+    },
+    {
+      "path": "skills/visual-explainer/references/css-patterns.md",
+      "sha256": "719d3f978d990375576cdbc45f9b9f5a358de5aabb0fc3e71e0f4ac70bb765df",
+      "executable": false
+    },
+    {
+      "path": "skills/visual-explainer/references/libraries.md",
+      "sha256": "7844fc26b12513e479e26cc9520a421c3a69b7f5959655d13394bd689d644851",
+      "executable": false
+    },
+    {
+      "path": "skills/visual-explainer/references/responsive-nav.md",
+      "sha256": "f1e57b3ac27f91ea5ab38f2ebe903d063e6ec16f0795ded9ee5ca846ccad914b",
+      "executable": false
+    },
+    {
+      "path": "skills/visual-explainer/references/slide-patterns.md",
+      "sha256": "d5af0b89cb6b07ed17fc5e20846c1b568c774ff8e504619aa2465ad80877ea76",
+      "executable": false
+    },
+    {
+      "path": "skills/visual-explainer/templates/architecture.html",
+      "sha256": "3641f34a21d4d22a14fe56a1c03f9e39f555bd4e4aae49b4ede1c0b0953326bb",
+      "executable": false
+    },
+    {
+      "path": "skills/visual-explainer/templates/data-table.html",
+      "sha256": "562b7b29e4461f6cd5215747c95a3d4789df0fd78f738051379bdaabac780472",
+      "executable": false
+    },
+    {
+      "path": "skills/visual-explainer/templates/mermaid-flowchart.html",
+      "sha256": "bdad4d616214cdff345eebbfbec61ea368cbfeb379163462c61e33e94123836e",
+      "executable": false
+    },
+    {
+      "path": "skills/visual-explainer/templates/slide-deck.html",
+      "sha256": "f1cf8ca21c164429648617d8b0b48bb89effb1bc0ed723fdae8b3fa821ce3cef",
+      "executable": false
+    }
+  ]
+}

@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "2026-08-28",
+  "models": [
+    {
+      "modelId": "gpt-5.6-sol",
+      "provider": "openai-codex",
+      "family": "gpt-5.6",
+      "independenceGroup": "openai-codex:gpt-5.6",
+      "capabilities": {
+        "inputTypes": ["text", "image"],
+        "taskClasses": [
+          "architecture",
+          "implementation",
+          "integration",
+          "review"
+        ],
+        "taskClassScores": {
+          "architecture": 5,
+          "implementation": 5,
+          "integration": 5,
+          "review": 5
+        }
+      },
+      "thinking": {
+        "supportedLevels": ["off", "low", "medium", "high", "xhigh", "max"],
+        "recommendedLevel": "high"
+      },
+      "routing": { "reviewTier": "strong" }
+    },
+    {
+      "modelId": "gpt-5.6-terra",
+      "provider": "openai-codex",
+      "family": "gpt-5.6",
+      "independenceGroup": "openai-codex:gpt-5.6",
+      "capabilities": {
+        "inputTypes": ["text", "image"],
+        "taskClasses": ["implementation", "integration", "review"],
+        "taskClassScores": {
+          "implementation": 4,
+          "integration": 4,
+          "review": 4
+        }
+      },
+      "thinking": {
+        "supportedLevels": ["off", "low", "medium", "high", "xhigh", "max"],
+        "recommendedLevel": "high"
+      },
+      "routing": { "reviewTier": "standard" }
+    },
+    {
+      "modelId": "gpt-5.6-luna",
+      "provider": "openai-codex",
+      "family": "gpt-5.6",
+      "independenceGroup": "openai-codex:gpt-5.6",
+      "capabilities": {
+        "inputTypes": ["text", "image"],
+        "taskClasses": ["coordination", "exploration"],
+        "taskClassScores": {
+          "coordination": 4,
+          "exploration": 5
+        }
+      },
+      "thinking": {
+        "supportedLevels": ["off", "low", "medium", "high", "xhigh", "max"],
+        "recommendedLevel": "medium"
+      },
+      "routing": { "reviewTier": "basic" }
+    },
+    {
+      "modelId": "gpt-5.3-codex-spark",
+      "provider": "openai-codex",
+      "family": "gpt-5.3-codex",
+      "independenceGroup": "openai-codex:gpt-5.3-codex",
+      "capabilities": {
+        "inputTypes": ["text"],
+        "taskClasses": ["focused-edit"],
+        "taskClassScores": { "focused-edit": 5 }
+      },
+      "thinking": {
+        "supportedLevels": ["minimal", "low", "medium", "high", "xhigh"],
+        "recommendedLevel": "medium"
+      },
+      "routing": { "reviewTier": "basic" }
+    },
+    {
+      "modelId": "gemini-3.5-flash",
+      "provider": "google",
+      "family": "gemini-3.5",
+      "independenceGroup": "google:gemini-3.5",
+      "capabilities": {
+        "inputTypes": ["text", "image", "video", "audio", "pdf"],
+        "taskClasses": ["exploration", "multimodal"],
+        "taskClassScores": {
+          "exploration": 4,
+          "multimodal": 4
+        }
+      },
+      "thinking": {
+        "supportedLevels": ["minimal", "low", "medium", "high"],
+        "recommendedLevel": "medium"
+      },
+      "routing": { "reviewTier": "basic" }
+    },
+    {
+      "modelId": "gemini-3.5-flash-lite",
+      "provider": "google",
+      "family": "gemini-3.5",
+      "independenceGroup": "google:gemini-3.5",
+      "capabilities": {
+        "inputTypes": ["text", "image", "video", "audio", "pdf"],
+        "taskClasses": ["exploration", "multimodal"],
+        "taskClassScores": {
+          "exploration": 3,
+          "multimodal": 3
+        }
+      },
+      "thinking": {
+        "supportedLevels": ["minimal", "low", "medium", "high"],
+        "recommendedLevel": "low"
+      },
+      "routing": { "reviewTier": "basic" }
+    },
+    {
+      "modelId": "gemini-3.6-flash",
+      "provider": "google",
+      "family": "gemini-3.6",
+      "independenceGroup": "google:gemini-3.6",
+      "capabilities": {
+        "inputTypes": ["text", "image", "video", "audio", "pdf"],
+        "taskClasses": ["implementation", "multimodal"],
+        "taskClassScores": {
+          "implementation": 4,
+          "multimodal": 5
+        }
+      },
+      "thinking": {
+        "supportedLevels": ["minimal", "low", "medium", "high"],
+        "recommendedLevel": "medium"
+      },
+      "routing": { "reviewTier": "standard" }
+    },
+    {
+      "modelId": "gemini-3.7-flash",
+      "provider": "google",
+      "family": "gemini-3.7",
+      "independenceGroup": "google:gemini-3.7",
+      "capabilities": {
+        "inputTypes": ["text", "image", "video", "audio", "pdf"],
+        "taskClasses": [
+          "architecture",
+          "implementation",
+          "integration",
+          "multimodal",
+          "review"
+        ],
+        "taskClassScores": {
+          "architecture": 4,
+          "implementation": 4,
+          "integration": 4,
+          "multimodal": 5,
+          "review": 4
+        }
+      },
+      "thinking": {
+        "supportedLevels": ["low", "medium", "high"],
+        "recommendedLevel": "high"
+      },
+      "routing": { "reviewTier": "strong" }
+    }
+  ]
+}
