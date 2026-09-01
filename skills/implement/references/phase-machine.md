@@ -93,7 +93,7 @@ For each wave, the delegating task:
 7. saves each complete start response, records the actual launched provider/model/thinking settings, and verifies all three against the preserved model-routing resolution before prompting;
 8. after all Pi agents start, launches one `herdr agent prompt ... --wait` process per child concurrently with its complete handoff;
 9. while those processes are still running, observes each agent enter working state and immediately records productive-prompt evidence through the dedicated write-once event;
-10. only after dispatch is durably recorded, joins the concurrent prompt-and-wait processes with bounded deadlines; overdue work enters timeout cancellation and cannot settle successfully;
+10. only after dispatch is durably recorded, joins the concurrent prompt-and-wait processes with deadlines of at least `900000` milliseconds (15 minutes), while preserving the runtime schema's three-hour maximum; overdue work enters timeout cancellation and cannot settle successfully;
 11. stores complete child output and digest, then reconciles it with real changes;
 12. records the observed child runtime as settled, then applies `accept-task` with verification evidence; acceptance marks the child done and releases its slot atomically;
 13. closes or preserves exact recorded resources after outputs and descendant state are durable.

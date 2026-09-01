@@ -135,10 +135,12 @@ Run `herdr agent` only to confirm that the required Pi kind is available and to 
 
 A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. Preserve the resolution's SHA-256 digest before launch, save the complete JSON start response, and run the shared policy's `verify-launch` command with both artifacts before prompting. Its `result.argv` must prove the resolved provider, model, and thinking level. When available, also compare the child Pi environment (`PI_PROVIDER`, `PI_MODEL`, and `PI_REASONING_LEVEL`) through a saved runtime-environment artifact. A mismatch or missing setting requires cleanup of the exact owned resources and the invoking workflow's failure path. If the agent is blocked during startup, the command returns `agent_not_ready` immediately but keeps the name available for `agent read` and `agent send-keys`. Inspect the blocked state and use a bounded `agent wait`; never wait indefinitely. On timeout or failure, preserve available output and clean up only the exact resources owned by the invoking workflow. Wait until the agent becomes idle before prompting it. Startup defaults to a 30-second timeout.
 
+Every skill-driven wait for productive subagent completion—whether a combined `agent prompt --wait` command or a standalone `agent wait` command—**MUST** pass `--timeout` with a value of at least `900000` milliseconds (15 minutes). Shorter productive-work deadlines are forbidden. Fifteen minutes is a strict minimum, not a recommended maximum: choose a longer deadline before dispatch when broad repository inspection, external research, implementation, testing, or several evidence sources may require it. The 30-second startup timeout, the five-second prompt-start detection below, and shorter state-specific diagnostic waits that do not wait for completion are separate health checks and do not reduce this minimum.
+
 Submit work through the agent surface:
 
 ```bash
-herdr agent prompt reviewer "Review the current diff and report only actionable findings." --wait --timeout 120000
+herdr agent prompt reviewer "Review the current diff and report only actionable findings." --wait --timeout 900000
 ```
 
 `agent prompt` honors the pane's live bracketed-paste mode and sends text followed by encoded Enter after a short delay. It rejects an agent already waiting at an approval or question dialog with `agent_blocked` before sending any input. Inspect the blocked UI and ask the user before answering it. For normal agent work, `--wait` is enough: it waits for the first settled `idle`, `done`, or `blocked` state. Do not repeat those defaults with `--until`.
@@ -151,7 +153,7 @@ Use `--until` only for a state-specific workflow, such as waiting for an already
 herdr agent wait reviewer --until blocked --timeout 120000
 ```
 
-Without `--until`, standalone `agent wait` uses the same settled-state defaults as `agent prompt --wait`.
+Without `--until`, standalone `agent wait` uses the same settled-state defaults as `agent prompt --wait`; it is therefore a productive-completion wait and must obey the 15-minute minimum.
 
 Use logical keys for interactive agent UI controls:
 

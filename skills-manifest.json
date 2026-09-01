@@ -4,7 +4,7 @@
   "files": [
     {
       "path": "skills/agent-review/SKILL.md",
-      "sha256": "1b9a74c14cdf3de3eab42d3c94492ebc233281e1a524e07b9b362b398a4b0204",
+      "sha256": "75aeb69f28bb209b29ea5ac473be50cad8d1ffc8d51d6e7bdbd658f4a0df0206",
       "executable": false
     },
     {
@@ -34,7 +34,7 @@
     },
     {
       "path": "skills/design-council/SKILL.md",
-      "sha256": "8a5da5daf6a9c5bbdf32162e39a740e4bf70a4e5d682ce940f1467c5b4697adb",
+      "sha256": "cbec95a3ce5f65b583a3e02acc9c2e39743f4fe71cc5468973cb06fe94853dd3",
       "executable": false
     },
     {
@@ -44,12 +44,12 @@
     },
     {
       "path": "skills/discuss/SKILL.md",
-      "sha256": "8ab02c6d2faba7c44c60d3231149add5f5a5ae22c1796eba36bd65bf164015f0",
+      "sha256": "b704bb6f1020433c61993000502f6248f3cd8000fb8b6d8d66bddb2b44eacaed",
       "executable": false
     },
     {
       "path": "skills/grill-me/SKILL.md",
-      "sha256": "2181b1417ecee46d849ceb04c05fd0830e712889e65a10472b27eebc7e335897",
+      "sha256": "470c93fffc0e8b2df44324316c0b480d0d18610bb7d57806d15989e6177427ca",
       "executable": false
     },
     {
@@ -89,17 +89,17 @@
     },
     {
       "path": "skills/herdr/SKILL.md",
-      "sha256": "98d25cfb19404df5632c0468ec9b094fa99c3108ed2e5f621bdf8e0e1429dc51",
+      "sha256": "b30849b096993bb4936386817dcb3514deb09032fe25ebb4ffac517866a7f604",
       "executable": false
     },
     {
       "path": "skills/implement/SKILL.md",
-      "sha256": "e4c69136f8db1c69fcf71c69b1fceed1e7d3c0c3a27f90b721ca1c1965e245f7",
+      "sha256": "0cf59bd0315e02f89717dbdc831dbd3d3e8df5a41fa2f1450d8ba09a055201ad",
       "executable": false
     },
     {
       "path": "skills/implement/references/phase-machine.md",
-      "sha256": "f5d5c55676aa0a4c1700c25a4079436163f95163853482fdc31e3704fc81541b",
+      "sha256": "7f966ccb1470d9e959d0c325ab221ba49093cf41387a25924f30450f04defbc4",
       "executable": false
     },
     {
@@ -169,7 +169,7 @@
     },
     {
       "path": "skills/ui-ux-grill-me/SKILL.md",
-      "sha256": "a86e6791f272e1c6274ca3d1a9b5118ae8ca29ee0b357e496317cbfd7dd30f82",
+      "sha256": "ad7f3208b22108c289fbb8b8be1cc77856e745ff194e5efcd2bda68b8c00cdba",
       "executable": false
     },
     {

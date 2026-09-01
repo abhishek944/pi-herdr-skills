@@ -143,7 +143,7 @@ For every immediate child wave, the delegating task:
 7. starts every child concurrently in its named pane as a Pi agent using `--kind pi`, passing its recorded provider/model/thinking selection explicitly through Pi with a unique runtime name and bounded deadline;
 8. records immutable agent-session provenance, verifies the complete launch against the preserved resolution digest, and records the digest-bound verification artifact before moving the runtime to working;
 9. after all Pi agents start and every verification is preserved, launches one `herdr agent prompt ... --wait` process per child concurrently with its complete handoff; while those processes are still running, observes each agent enter working state and immediately records dispatch through the dedicated write-once productive-prompt event;
-10. only after dispatch is durably recorded, joins the concurrent prompt-and-wait processes with bounded deadlines; overdue work follows timeout cancellation rather than successful settlement;
+10. only after dispatch is durably recorded, joins the concurrent prompt-and-wait processes with deadlines of at least `900000` milliseconds (15 minutes), while preserving the runtime schema's three-hour maximum; overdue work follows timeout cancellation rather than successful settlement;
 11. stores each complete child handoff under the run outputs folder and records its digest;
 12. records observed runtime settlement, then atomically accepts successful blocker-free child tasks with parent verification evidence, which marks them done and releases their slots;
 13. closes only exact recorded resources, saving and digesting each close response; preserved resources keep the task blocked until verified closure.

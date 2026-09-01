@@ -51,6 +51,21 @@ for path in skill_files:
     assert name not in seen, f"duplicate skill name: {name}"
     seen.add(name)
 
+herdr_policy = (root / "skills/herdr/SKILL.md").read_text()
+assert "at least `900000` milliseconds (15 minutes)" in herdr_policy, "Herdr must enforce the 15-minute minimum productive subagent wait"
+assert "--wait --timeout 900000" in herdr_policy, "Herdr's productive prompt example must use the 15-minute minimum"
+timeout_contracts = [
+    "skills/agent-review/SKILL.md",
+    "skills/design-council/SKILL.md",
+    "skills/discuss/SKILL.md",
+    "skills/grill-me/SKILL.md",
+    "skills/implement/SKILL.md",
+    "skills/implement/references/phase-machine.md",
+    "skills/ui-ux-grill-me/SKILL.md",
+]
+for relative in timeout_contracts:
+    assert "`900000` milliseconds (15 minutes)" in (root / relative).read_text(), f"missing 15-minute subagent wait contract: {relative}"
+
 readme = (root / "README.md").read_text()
 for name in seen:
     assert f"`{name}`" in readme, f"README does not list {name}"
