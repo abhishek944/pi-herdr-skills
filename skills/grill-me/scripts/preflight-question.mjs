@@ -3,8 +3,9 @@
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { openSystemBrowser } from "./open-system-browser.mjs";
 import { resolveSessionDir } from "./session-path.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -104,10 +105,11 @@ if (code !== 200)
   throw new Error(`Preflight failed: ${url} returned ${code || "no response"}`);
 console.log(`Preflight OK: ${url}`);
 if (input.open) {
-  execFileSync(
-    "browser-use",
-    ["--session", `grill-me-${input.port}`, "open", url],
-    { stdio: "inherit" },
-  );
-  console.log("Opened through Browser Use.");
+  try {
+    openSystemBrowser(url);
+    console.log("Opened in the visible system browser.");
+  } catch (error) {
+    console.error("Could not open the visible system browser:", error.message);
+    process.exit(1);
+  }
 }

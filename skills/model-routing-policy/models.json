@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026-08-28",
+  "catalogVersion": "2026-09-01",
   "models": [
     {
       "modelId": "gpt-5.6-sol",
@@ -8,7 +8,10 @@
       "family": "gpt-5.6",
       "independenceGroup": "openai-codex:gpt-5.6",
       "capabilities": {
-        "inputTypes": ["text", "image"],
+        "inputTypes": [
+          "text",
+          "image"
+        ],
         "taskClasses": [
           "architecture",
           "implementation",
@@ -23,10 +26,19 @@
         }
       },
       "thinking": {
-        "supportedLevels": ["off", "low", "medium", "high", "xhigh", "max"],
+        "supportedLevels": [
+          "off",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
         "recommendedLevel": "high"
       },
-      "routing": { "reviewTier": "strong" }
+      "routing": {
+        "reviewTier": "strong"
+      }
     },
     {
       "modelId": "gpt-5.6-terra",
@@ -34,8 +46,15 @@
       "family": "gpt-5.6",
       "independenceGroup": "openai-codex:gpt-5.6",
       "capabilities": {
-        "inputTypes": ["text", "image"],
-        "taskClasses": ["implementation", "integration", "review"],
+        "inputTypes": [
+          "text",
+          "image"
+        ],
+        "taskClasses": [
+          "implementation",
+          "integration",
+          "review"
+        ],
         "taskClassScores": {
           "implementation": 4,
           "integration": 4,
@@ -43,10 +62,19 @@
         }
       },
       "thinking": {
-        "supportedLevels": ["off", "low", "medium", "high", "xhigh", "max"],
+        "supportedLevels": [
+          "off",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
         "recommendedLevel": "high"
       },
-      "routing": { "reviewTier": "standard" }
+      "routing": {
+        "reviewTier": "standard"
+      }
     },
     {
       "modelId": "gpt-5.6-luna",
@@ -54,18 +82,33 @@
       "family": "gpt-5.6",
       "independenceGroup": "openai-codex:gpt-5.6",
       "capabilities": {
-        "inputTypes": ["text", "image"],
-        "taskClasses": ["coordination", "exploration"],
+        "inputTypes": [
+          "text",
+          "image"
+        ],
+        "taskClasses": [
+          "coordination",
+          "exploration"
+        ],
         "taskClassScores": {
           "coordination": 4,
           "exploration": 5
         }
       },
       "thinking": {
-        "supportedLevels": ["off", "low", "medium", "high", "xhigh", "max"],
+        "supportedLevels": [
+          "off",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
         "recommendedLevel": "medium"
       },
-      "routing": { "reviewTier": "basic" }
+      "routing": {
+        "reviewTier": "basic"
+      }
     },
     {
       "modelId": "gpt-5.3-codex-spark",
@@ -73,15 +116,29 @@
       "family": "gpt-5.3-codex",
       "independenceGroup": "openai-codex:gpt-5.3-codex",
       "capabilities": {
-        "inputTypes": ["text"],
-        "taskClasses": ["focused-edit"],
-        "taskClassScores": { "focused-edit": 5 }
+        "inputTypes": [
+          "text"
+        ],
+        "taskClasses": [
+          "focused-edit"
+        ],
+        "taskClassScores": {
+          "focused-edit": 5
+        }
       },
       "thinking": {
-        "supportedLevels": ["minimal", "low", "medium", "high", "xhigh"],
+        "supportedLevels": [
+          "minimal",
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ],
         "recommendedLevel": "medium"
       },
-      "routing": { "reviewTier": "basic" }
+      "routing": {
+        "reviewTier": "basic"
+      }
     },
     {
       "modelId": "gemini-3.5-flash",
@@ -89,18 +146,34 @@
       "family": "gemini-3.5",
       "independenceGroup": "google:gemini-3.5",
       "capabilities": {
-        "inputTypes": ["text", "image", "video", "audio", "pdf"],
-        "taskClasses": ["exploration", "multimodal"],
+        "inputTypes": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "pdf"
+        ],
+        "taskClasses": [
+          "exploration",
+          "multimodal"
+        ],
         "taskClassScores": {
           "exploration": 4,
           "multimodal": 4
         }
       },
       "thinking": {
-        "supportedLevels": ["minimal", "low", "medium", "high"],
+        "supportedLevels": [
+          "minimal",
+          "low",
+          "medium",
+          "high"
+        ],
         "recommendedLevel": "medium"
       },
-      "routing": { "reviewTier": "basic" }
+      "routing": {
+        "reviewTier": "basic"
+      }
     },
     {
       "modelId": "gemini-3.5-flash-lite",
@@ -108,18 +181,34 @@
       "family": "gemini-3.5",
       "independenceGroup": "google:gemini-3.5",
       "capabilities": {
-        "inputTypes": ["text", "image", "video", "audio", "pdf"],
-        "taskClasses": ["exploration", "multimodal"],
+        "inputTypes": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "pdf"
+        ],
+        "taskClasses": [
+          "exploration",
+          "multimodal"
+        ],
         "taskClassScores": {
           "exploration": 3,
           "multimodal": 3
         }
       },
       "thinking": {
-        "supportedLevels": ["minimal", "low", "medium", "high"],
+        "supportedLevels": [
+          "minimal",
+          "low",
+          "medium",
+          "high"
+        ],
         "recommendedLevel": "low"
       },
-      "routing": { "reviewTier": "basic" }
+      "routing": {
+        "reviewTier": "basic"
+      }
     },
     {
       "modelId": "gemini-3.6-flash",
@@ -127,18 +216,34 @@
       "family": "gemini-3.6",
       "independenceGroup": "google:gemini-3.6",
       "capabilities": {
-        "inputTypes": ["text", "image", "video", "audio", "pdf"],
-        "taskClasses": ["implementation", "multimodal"],
+        "inputTypes": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "pdf"
+        ],
+        "taskClasses": [
+          "implementation",
+          "multimodal"
+        ],
         "taskClassScores": {
           "implementation": 4,
           "multimodal": 5
         }
       },
       "thinking": {
-        "supportedLevels": ["minimal", "low", "medium", "high"],
+        "supportedLevels": [
+          "minimal",
+          "low",
+          "medium",
+          "high"
+        ],
         "recommendedLevel": "medium"
       },
-      "routing": { "reviewTier": "standard" }
+      "routing": {
+        "reviewTier": "standard"
+      }
     },
     {
       "modelId": "gemini-3.7-flash",
@@ -146,7 +251,13 @@
       "family": "gemini-3.7",
       "independenceGroup": "google:gemini-3.7",
       "capabilities": {
-        "inputTypes": ["text", "image", "video", "audio", "pdf"],
+        "inputTypes": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "pdf"
+        ],
         "taskClasses": [
           "architecture",
           "implementation",
@@ -163,10 +274,576 @@
         }
       },
       "thinking": {
-        "supportedLevels": ["low", "medium", "high"],
+        "supportedLevels": [
+          "low",
+          "medium",
+          "high"
+        ],
         "recommendedLevel": "high"
       },
-      "routing": { "reviewTier": "strong" }
+      "routing": {
+        "reviewTier": "strong"
+      }
+    },
+    {
+      "provider": "opencode-go",
+      "modelId": "deepseek-v4-flash",
+      "family": "deepseek-v4",
+      "independenceGroup": "opencode-go:deepseek-v4",
+      "capabilities": {
+        "inputTypes": [
+          "text"
+        ],
+        "taskClasses": [
+          "coordination",
+          "exploration",
+          "implementation",
+          "focused-edit"
+        ],
+        "taskClassScores": {
+          "coordination": 3,
+          "exploration": 4,
+          "implementation": 4,
+          "focused-edit": 3
+        }
+      },
+      "thinking": {
+        "supportedLevels": [
+          "low",
+          "high",
+          "max"
+        ],
+        "recommendedLevel": "high"
+      },
+      "routing": {
+        "reviewTier": "standard"
+      }
+    },
+    {
+      "provider": "opencode-go",
+      "modelId": "deepseek-v4-flash-vision-exp",
+      "family": "deepseek-v4",
+      "independenceGroup": "opencode-go:deepseek-v4",
+      "capabilities": {
+        "inputTypes": [
+          "text",
+          "image"
+        ],
+        "taskClasses": [
+          "coordination",
+          "exploration",
+          "implementation",
+          "focused-edit",
+          "multimodal"
+        ],
+        "taskClassScores": {
+          "coordination": 3,
+          "exploration": 4,
+          "implementation": 4,
+          "focused-edit": 3,
+          "multimodal": 3
+        }
+      },
+      "thinking": {
+        "supportedLevels": [
+          "low",
+          "high",
+          "max"
+        ],
+        "recommendedLevel": "high"
+      },
+      "routing": {
+        "reviewTier": "standard"
+      }
+    },
+    {
+      "provider": "opencode-go",
+      "modelId": "deepseek-v4-pro",
+      "family": "deepseek-v4",
+      "independenceGroup": "opencode-go:deepseek-v4",
+      "capabilities": {
+        "inputTypes": [
+          "text"
+        ],
+        "taskClasses": [
+          "coordination",
+          "exploration",
+          "implementation",
+          "focused-edit"
+        ],
+        "taskClassScores": {
+          "coordination": 3,
+          "exploration": 4,
+          "implementation": 4,
+          "focused-edit": 3
+        }
+      },
+      "thinking": {
+        "supportedLevels": [
+          "high",
+          "max"
+        ],
+        "recommendedLevel": "high"
+      },
+      "routing": {
+        "reviewTier": "standard"
+      }
+    },
+    {
+      "provider": "opencode-go",
+      "modelId": "glm-5.3",
+      "family": "glm-5",
+      "independenceGroup": "opencode-go:glm-5",
+      "capabilities": {
+        "inputTypes": [
+          "text"
+        ],
+        "taskClasses": [
+          "coordination",
+          "exploration",
+          "implementation",
+          "focused-edit"
+        ],
+        "taskClassScores": {
+          "coordination": 3,
+          "exploration": 4,
+          "implementation": 4,
+          "focused-edit": 3
+        }
+      },
+      "thinking": {
+        "supportedLevels": [
+          "low",
+          "high",
+          "max"
+        ],
+        "recommendedLevel": "high"
+      },
+      "routing": {
+        "reviewTier": "standard"
+      }
+    },
+    {
+      "provider": "opencode-go",
+      "modelId": "glm-5.3-flash",
+      "family": "glm-5",
+      "independenceGroup": "opencode-go:glm-5",
+      "capabilities": {
+        "inputTypes": [
+          "text",
+          "image"
+        ],
+        "taskClasses": [
+          "coordination",
+          "exploration",
+          "implementation",
+          "focused-edit",
+          "multimodal"
+        ],
+        "taskClassScores": {
+          "coordination": 3,
+          "exploration": 4,
+          "implementation": 4,
+          "focused-edit": 3,
+          "multimodal": 3
+        }
+      },
+      "thinking": {
+        "supportedLevels": [
+          "low",
+          "high",
+          "max"
+        ],
+        "recommendedLevel": "high"
+      },
+      "routing": {
+        "reviewTier": "standard"
+      }
+    },
+    {
+      "provider": "opencode-go",
+      "modelId": "grok-4.6",
+      "family": "grok-4",
+      "independenceGroup": "opencode-go:grok-4",
+      "capabilities": {
+        "inputTypes": [
+          "text",
+          "image"
+        ],
+        "taskClasses": [
+          "coordination",
+          "exploration",
+          "implementation",
+          "focused-edit",
+          "architecture",
+          "integration",
+          "review",
+          "multimodal"
+        ],
+        "taskClassScores": {
+          "coordination": 4,
+          "exploration": 5,
+          "implementation": 5,
+          "focused-edit": 4,
+          "architecture": 4,
+          "integration": 4,
+          "review": 4,
+          "multimodal": 4
+        }
+      },
+      "thinking": {
+        "supportedLevels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "recommendedLevel": "medium"
+      },
+      "routing": {
+        "reviewTier": "strong"
+      }
+    },
+    {
+      "provider": "opencode-go",
+      "modelId": "hy4-preview",
+      "family": "hy4",
+      "independenceGroup": "opencode-go:hy4",
+      "capabilities": {
+        "inputTypes": [
+          "text"
+        ],
+        "taskClasses": [
+          "coordination",
+          "exploration",
+          "implementation",
+          "focused-edit"
+        ],
+        "taskClassScores": {
+          "coordination": 3,
+          "exploration": 4,
+          "implementation": 4,
+          "focused-edit": 3
+        }
+      },
+      "thinking": {
+        "supportedLevels": [
+          "off",
+          "high"
+        ],
+        "recommendedLevel": "high"
+      },
+      "routing": {
+        "reviewTier": "standard"
+      }
+    },
+    {
+      "provider": "opencode-go",
+      "modelId": "kimi-k3",
+      "family": "kimi",
+      "independenceGroup": "opencode-go:kimi",
+      "capabilities": {
+        "inputTypes": [
+          "text",
+          "image"
+        ],
+        "taskClasses": [
+          "coordination",
+          "exploration",
+          "implementation",
+          "focused-edit",
+          "architecture",
+          "integration",
+          "review",
+          "multimodal"
+        ],
+        "taskClassScores": {
+          "coordination": 4,
+          "exploration": 5,
+          "implementation": 5,
+          "focused-edit": 4,
+          "architecture": 4,
+          "integration": 4,
+          "review": 4,
+          "multimodal": 4
+        }
+      },
+      "thinking": {
+        "supportedLevels": [
+          "max"
+        ],
+        "recommendedLevel": "max"
+      },
+      "routing": {
+        "reviewTier": "strong"
+      }
+    },
+    {
+      "provider": "opencode-go",
+      "modelId": "mimo-v2.5",
+      "family": "mimo",
+      "independenceGroup": "opencode-go:mimo",
+      "capabilities": {
+        "inputTypes": [
+          "text",
+          "image"
+        ],
+        "taskClasses": [
+          "coordination",
+          "exploration",
+          "implementation",
+          "focused-edit",
+          "multimodal"
+        ],
+        "taskClassScores": {
+          "coordination": 3,
+          "exploration": 4,
+          "implementation": 4,
+          "focused-edit": 3,
+          "multimodal": 3
+        }
+      },
+      "thinking": {
+        "supportedLevels": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "recommendedLevel": "medium"
+      },
+      "routing": {
+        "reviewTier": "standard"
+      }
+    },
+    {
+      "provider": "opencode-go",
+      "modelId": "mimo-v2.5-pro",
+      "family": "mimo",
+      "independenceGroup": "opencode-go:mimo",
+      "capabilities": {
+        "inputTypes": [
+          "text"
+        ],
+        "taskClasses": [
+          "coordination",
+          "exploration",
+          "implementation",
+          "focused-edit"
+        ],
+        "taskClassScores": {
+          "coordination": 3,
+          "exploration": 4,
+          "implementation": 4,
+          "focused-edit": 3
+        }
+      },
+      "thinking": {
+        "supportedLevels": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "recommendedLevel": "medium"
+      },
+      "routing": {
+        "reviewTier": "standard"
+      }
+    },
+    {
+      "provider": "opencode-go",
+      "modelId": "minimax-m3",
+      "family": "minimax",
+      "independenceGroup": "opencode-go:minimax",
+      "capabilities": {
+        "inputTypes": [
+          "text",
+          "image"
+        ],
+        "taskClasses": [
+          "coordination",
+          "exploration",
+          "implementation",
+          "focused-edit",
+          "architecture",
+          "integration",
+          "review",
+          "multimodal"
+        ],
+        "taskClassScores": {
+          "coordination": 4,
+          "exploration": 5,
+          "implementation": 5,
+          "focused-edit": 4,
+          "architecture": 4,
+          "integration": 4,
+          "review": 4,
+          "multimodal": 4
+        }
+      },
+      "thinking": {
+        "supportedLevels": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "recommendedLevel": "medium"
+      },
+      "routing": {
+        "reviewTier": "strong"
+      }
+    },
+    {
+      "provider": "opencode-go",
+      "modelId": "muse-spark-1.2-contributor",
+      "family": "muse-spark",
+      "independenceGroup": "opencode-go:muse-spark",
+      "capabilities": {
+        "inputTypes": [
+          "text",
+          "image"
+        ],
+        "taskClasses": [
+          "coordination",
+          "exploration",
+          "implementation",
+          "focused-edit",
+          "multimodal"
+        ],
+        "taskClassScores": {
+          "coordination": 3,
+          "exploration": 4,
+          "implementation": 4,
+          "focused-edit": 3,
+          "multimodal": 3
+        }
+      },
+      "thinking": {
+        "supportedLevels": [
+          "minimal",
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "recommendedLevel": "medium"
+      },
+      "routing": {
+        "reviewTier": "standard"
+      }
+    },
+    {
+      "provider": "opencode-go",
+      "modelId": "qwen3.7-max",
+      "family": "qwen3",
+      "independenceGroup": "opencode-go:qwen3",
+      "capabilities": {
+        "inputTypes": [
+          "text"
+        ],
+        "taskClasses": [
+          "coordination",
+          "exploration",
+          "implementation",
+          "focused-edit"
+        ],
+        "taskClassScores": {
+          "coordination": 3,
+          "exploration": 4,
+          "implementation": 4,
+          "focused-edit": 3
+        }
+      },
+      "thinking": {
+        "supportedLevels": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "recommendedLevel": "medium"
+      },
+      "routing": {
+        "reviewTier": "standard"
+      }
+    },
+    {
+      "provider": "opencode-go",
+      "modelId": "qwen3.8-flash",
+      "family": "qwen3",
+      "independenceGroup": "opencode-go:qwen3",
+      "capabilities": {
+        "inputTypes": [
+          "text",
+          "image"
+        ],
+        "taskClasses": [
+          "coordination",
+          "exploration",
+          "implementation",
+          "focused-edit",
+          "multimodal"
+        ],
+        "taskClassScores": {
+          "coordination": 3,
+          "exploration": 4,
+          "implementation": 4,
+          "focused-edit": 3,
+          "multimodal": 3
+        }
+      },
+      "thinking": {
+        "supportedLevels": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "recommendedLevel": "medium"
+      },
+      "routing": {
+        "reviewTier": "standard"
+      }
+    },
+    {
+      "provider": "opencode-go",
+      "modelId": "qwen3.8-max",
+      "family": "qwen3",
+      "independenceGroup": "opencode-go:qwen3",
+      "capabilities": {
+        "inputTypes": [
+          "text",
+          "image"
+        ],
+        "taskClasses": [
+          "coordination",
+          "exploration",
+          "implementation",
+          "focused-edit",
+          "architecture",
+          "integration",
+          "review",
+          "multimodal"
+        ],
+        "taskClassScores": {
+          "coordination": 4,
+          "exploration": 5,
+          "implementation": 5,
+          "focused-edit": 4,
+          "architecture": 4,
+          "integration": 4,
+          "review": 4,
+          "multimodal": 4
+        }
+      },
+      "thinking": {
+        "supportedLevels": [
+          "low",
+          "medium",
+          "xhigh"
+        ],
+        "recommendedLevel": "medium"
+      },
+      "routing": {
+        "reviewTier": "strong"
+      }
     }
   ]
 }

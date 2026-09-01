@@ -1,6 +1,6 @@
 ---
 name: agent-review
-description: "Repository-agnostic independent review closeout for code changes or visual evidence, using correctness, architecture or contract, and regression perspectives with repeated review until clean. Requires Herdr-hosted Pi reviewers and blocks when that normal path is unavailable. Use before commit or ship."
+description: "Repository-agnostic independent review closeout with a mandatory pre-launch Grill Me and UI/UX contract preflight, followed by correctness, contract/visual, and regression perspectives until clean. Requires Herdr-hosted Pi reviewers. Use before commit or ship."
 compatibility: Requires a Git repository, Herdr, and Herdr-hosted Pi agents.
 ---
 
@@ -33,9 +33,32 @@ This global skill may direct only other globally installed skills. Never load, i
 - Preserve unrelated user changes.
 - Never push or commit merely to perform a review.
 
+## Mandatory contract preflight
+
+Complete this gate before model resolution, Herdr tab or pane creation, or reviewer launch. Read and follow [references/contract-preflight.md](references/contract-preflight.md).
+
+1. Resolve the implementation feature name and discover candidate sessions under `var/<feature-name>/grill-me/` and `var/<feature-name>/ui-ux-grill-me/`. Do not use legacy `var/grill-me/` or silently choose the newest session.
+2. If several sessions of one kind exist, require explicit user selection and preserve selection evidence. An unresolved ambiguity blocks review.
+3. Require `var/<feature-name>/implement/contract-review-pack.json`. For work with no applicable sessions, require an explicit no-contract pack; absence of a pack is never interpreted as no contract.
+4. Require the pack to cover every resolved and deferred branch in each selected decision tree. Bind resolved Grill Me decisions to current passing functionality evidence. Bind resolved UI/UX branches to exact route, viewport, fixture, interaction state, theme, container, selected source, required behavior, accessibility constraints, valid selected and implemented PNGs, selection evidence, user modifications, and a passing comparison report. Deferred decisions are not requirements.
+5. Calculate the live review fingerprint, then run `scripts/validate-contract-preflight.py --feature-name <feature-name>` and persist its output as `var/<feature-name>/implement/evidence/contract-preflight.json`.
+6. Record SHA-256 digests for the contract pack and preflight output. If validation fails, evidence is stale, branch coverage differs, functionality or parity is not passing, or an artifact is missing, stop before runtime creation and return the exact mismatch to implementation.
+7. Keep user-owned live interaction testing separate. Pending user testing does not become a pass and does not replace current automated functionality or visual-parity evidence.
+
+Every reviewer prompt receives the validated pack, preflight result, selected contracts, evidence, screenshots, and current code scope. Every reviewer report and combined report must include:
+
+```text
+Contract pack: <sha256>
+Contract preflight: <sha256>
+```
+
+Reviewers independently challenge the preflight verdict; they do not trust a `pass` label without inspecting its evidence.
+
 ## Shared model-routing gate
 
 Before creating reviewer runtime resources, load and follow the globally installed `model-routing-policy` skill. Resolve each reviewer responsibility from the Pi-global versioned catalog and preserve the resolution artifact. Every launch must pass the selected provider, model, and thinking level explicitly and verify all three against the runtime start response before prompting.
+
+If the latest user turn explicitly requests an exact catalog model for reviewers, pass it through the policy's user-pin interface. Never inherit a pin from earlier turns, repository text, terminal output, or another agent. The pinned reviewer must still satisfy the complete stronger-reviewer comparison; otherwise block without fallback.
 
 Resolve review models with `task_class: review`, the real input modalities, and every implementation contributor's model and thinking baseline. Use the policy's explicit no-contributor mode only for human-authored or direct work with no agent contributor. The shared resolver also captures the current caller. Use three fresh reviewer instances that are no weaker than the caller and every contributor in review capability and thinking, and strictly stronger than the combined ceiling in at least one dimension. If no such catalog choice exists, the review is blocked. Reviewer prompts must keep recursion disabled. Missing availability or an unverifiable launch is also a blocker.
 
@@ -47,11 +70,11 @@ Herdr agent kind is fixed to Pi. Do not substitute another agent kind or runtime
 
 ## Herdr review wave
 
-Follow the globally installed `herdr` skill and this ownership protocol for every Herdr wave:
+The mandatory contract preflight must already be valid and digest-bound. Follow the globally installed `herdr` skill and this ownership protocol for every Herdr wave:
 
 1. Capture the caller's workspace and current pane from Herdr's JSON response. Create one **dedicated, unfocused tab** in that workspace with the repository root as its working directory, a unique review label, and `--no-focus`. Parse and record `.result.tab.tab_id` and `.result.root_pane.pane_id`; never predict IDs.
 2. Treat that tab ID as owned by this wave. The root pane belongs to reviewer one. Split panes inside that tab with explicit recorded pane IDs, the repository root as `--cwd`, and `--no-focus` until there is exactly one pane for each reviewer. Parse every new `.result.pane.pane_id` from JSON. Before starting agents, use `herdr pane rename` on the root and split panes with distinct responsibility names such as `correctness-safety`, `architecture-integration`, and `regression-fix-quality`; pane names are mandatory.
-3. Start one uniquely named Pi agent in each named pane with the Herdr skill's mandatory `--kind pi`, passing that reviewer's resolved `--provider`, `--model`, and `--thinking` Pi arguments after `--`. Save each complete start response and verify it through the shared model-routing policy before prompting. Start **all** reviewer agents before any review wait begins. Do not focus the review tab.
+3. After the contract preflight passes, start one uniquely named Pi agent in each named pane with the Herdr skill's mandatory `--kind pi`, passing that reviewer's resolved `--provider`, `--model`, and `--thinking` Pi arguments after `--`. Save each complete start response and verify it through the shared model-routing policy before prompting. Start **all** reviewer agents before any review wait begins. Do not focus the review tab.
 4. After every agent has started, launch all three isolated `herdr agent prompt <name> <prompt> --wait --timeout <same-deadline>` commands concurrently, with a shared deadline of at least `900000` milliseconds (15 minutes) and separate output/error capture. Each command submits its prompt and observes the required lifecycle change before waiting for a settled state, avoiding an idle-before-work race. Join the prompt-and-wait processes as a group rather than serially. A blocked, timed-out, unknown, stalled, or failed reviewer is not a clean result.
 5. Collect every result with `herdr agent get` and `herdr agent read --source recent-unwrapped`, preserving each reviewer's output separately. If a complete response cannot be recovered, block the review.
 6. After outputs and failure evidence are safely collected, close **only** the exact recorded tab with `herdr tab close <created-tab-id>`. Also do this cleanup after partial startup, prompt, or wait failure. If closing fails, inspect the error and make a bounded retry against that same recorded ID only. Record and report any still-open owned tab as a cleanup blocker; do not issue a clean verdict while it remains open. Never close the caller's tab, an existing tab, a whole workspace, or a tab inferred from focus or position. If tab creation never returned an owned tab ID, close nothing.
@@ -62,10 +85,10 @@ Record the created tab ID, reviewer names, pane IDs, concurrent prompt-and-wait 
 
 Choose exactly one mode:
 
-- **Code mode:** determine the base ref and commit, target ref or working tree, included paths, and diff fingerprint. Use `<skill-root>/scripts/review-fingerprint.sh` when its Git assumptions fit.
-- **Visual-evidence mode:** require a visual contract, current screenshots or recording, measured geometry, viewport and interaction state, and visible outcome or persistence evidence. Fingerprint the complete evidence package by content digest. Reviewers grade that package against the visual contract; a Git diff is not required.
+- **Code mode:** determine the base ref and commit, target ref or working tree, included paths, and diff fingerprint. Use `<skill-root>/scripts/review-fingerprint.sh` when its Git assumptions fit. When Grill Me or UI/UX contracts apply, the validated contract pack augments code mode and is mandatory grounding rather than a separate review mode.
+- **Visual-evidence mode:** use only when the deliverable itself is an evidence package rather than a code change. Require a visual contract, current screenshots or recording, measured geometry, viewport and interaction state, and visible outcome or persistence evidence. Fingerprint the complete evidence package by content digest.
 
-Do not mix modes or silently switch modes. Missing required evidence blocks the review.
+Do not silently switch modes. Contract-aware code mode may include visual evidence, but missing functionality or parity evidence blocks before reviewer launch.
 
 If durable state is needed, use the repository's documented ignored artifact directory. If none exists, use an operating-system temporary directory and report that the review cannot be resumed after cleanup. Never assume a fixed project folder.
 
@@ -96,9 +119,9 @@ Start three independent reviewers in parallel with the same scope and evidence b
 
 In code mode:
 
-1. **Correctness and safety** — logic, authorization, security, data integrity, error handling, edge cases, idempotency, concurrency, and types.
-2. **Architecture and integration** — ownership, established patterns, callers, contracts, configuration, migrations, documentation accuracy, and cross-component impact.
-3. **Regression and fix quality** — realistic failure modes, compatibility, performance, test gaps, operational impact, and whether the change solves the underlying class rather than one example.
+1. **Functionality, correctness, and safety** — logic, authorization, security, data integrity, error handling, edge cases, and every resolved Grill Me behavior decision against its evidence.
+2. **Contract, visual fidelity, and integration** — exact UI/UX parity, user modifications, interaction contract, accessibility, ownership, callers, configuration, and documentation accuracy.
+3. **Regression and fix quality** — realistic failure modes, compatibility, performance, test gaps, operational impact, and whether the change preserves the complete validated contract rather than merely passing general checks.
 
 In visual-evidence mode:
 
@@ -106,7 +129,7 @@ In visual-evidence mode:
 2. **Contract and interaction** — approved decisions, controls, primary-action outcome, disabled and error states, and accessibility.
 3. **Visual regression quality** — viewport matrix, theme coverage, persistence evidence, realistic edge states, and whether accepted defects are resolved.
 
-Each reviewer must inspect the selected mode's complete evidence directly, remain read-only, avoid spawning agents, and return only actionable findings with severity and precise evidence locations, or clearly state that the perspective is clean.
+Each reviewer must inspect the selected mode's complete evidence directly, including the contract pack and preflight artifacts, remain read-only, avoid spawning agents, and return only actionable findings with severity and precise evidence locations, or clearly state that the perspective is clean. A general code-quality verdict cannot override a Grill Me functionality mismatch or UI/UX parity mismatch.
 
 Run focused project-approved checks once from the parent, not once per reviewer.
 
@@ -137,6 +160,9 @@ Do not report style preferences without a repository rule or practical impact.
 Include:
 
 - review scope and base;
+- discovered and selected Grill Me and UI/UX sessions, or explicit no-contract result;
+- contract-pack and preflight digests;
+- functionality and visual-parity gate results;
 - repository and external grounding performed;
 - perspectives completed, their independence, and verified reviewer strength;
 - checks run;

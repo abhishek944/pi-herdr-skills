@@ -139,18 +139,21 @@ An expired takeover uses a fresh lease and coordinator instance. If active slots
 
 ## Root integration and review
 
+Before model resolution or reviewer runtime creation, the root creates `contract-review-pack.json` and `evidence/contract-preflight.json` under the canonical run folder. The pack exactly covers resolved and deferred decision-tree branches and binds current functionality, exact-state visual-parity, and user-owned live-test evidence.
+
 The root:
 
 1. waits for every implementation descendant to settle or records how cancelled outcomes were covered;
 2. requires task-reported changed files to equal the worktree delta from the initial snapshot;
 3. derives sibling overlaps and resolves every collision with rerun evidence;
 4. runs combined automated checks and required visual verification, then writes the user-owned live-test handoff; it runs live interactive end-to-end testing only when the latest request explicitly asks;
-5. fingerprints the final live change and writes the evidence index;
-6. launches fresh review instances that did not contribute to implementation and were not used in earlier review waves;
-7. records reviewer instance provenance, wave, fingerprint, and output paths;
-8. places fingerprint, wave, reviewer, and finding-ID markers in reports and records structured findings;
-9. fixes accepted findings and repeats integration and review on a new fingerprint;
-10. runs final validation with `--certify`;
-11. immediately applies `complete-run` with no intervening mutation.
+5. fingerprints the final live change, writes the evidence index, and builds the contract-review pack;
+6. runs the global Agent Review contract-preflight validator with the exact feature name and returns to implementation if discovery is ambiguous, branch coverage differs, or any resolved functionality or visual-parity evidence is missing, stale, or failing;
+7. launches fresh review instances only after preflight passes and only when they did not contribute to implementation or earlier review waves;
+8. records reviewer instance provenance, wave, fingerprint, contract-pack digest, preflight digest, and output paths;
+9. places fingerprint, contract digests, wave, reviewer, and finding-ID markers in reports and records structured findings;
+10. fixes accepted findings and repeats checks, contract preflight, integration, and review on a new fingerprint;
+11. runs final validation with `--certify`;
+12. immediately applies `complete-run` with no intervening mutation.
 
 Certification hashes distinct reports and evidence and checks the live fingerprint and mode-aware worktree delta while state is locked. `complete-run` checks them at entry and again as its final operation before completion. Any mismatch or state change requires fresh validation and review as applicable.

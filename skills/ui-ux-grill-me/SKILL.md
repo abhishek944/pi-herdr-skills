@@ -26,6 +26,7 @@ Help the user see and choose interface directions before implementation. This wo
 - Offer enough distinct options to make the decision meaningful, usually three to six. Include at least one conservative and one unconventional direction when appropriate.
 - Comments-only rejection is valid; never force a selection.
 - Keep one decision open at a time and wait for the user's response before advancing.
+- Open human comparison pages through the operating system's visible browser (`open` on macOS), never through Browser Use. Browser Use remains valid for automated capture and inspection, but it must not present UI/UX interview choices.
 - Preserve the selected image, source, viewport, interaction state, data fixture, and rationale. A label alone is not a visual contract.
 - Never expose private data, internal identifiers, credentials, or sensitive environment details in screenshots.
 - Global skill handoffs are allowed, but do not hard-code or require repository-only skill names or agent role names.
@@ -34,7 +35,7 @@ Help the user see and choose interface directions before implementation. This wo
 
 Apply this policy whenever the workflow uses an explorer, researcher, critic, reviewer, or any other independent agent. These are prompt responsibilities, not repository-defined skill or role names.
 
-Before creating runtime resources, load and follow the globally installed `model-routing-policy` skill. Resolve every responsibility from the Pi-global versioned catalog using `exploration`, `multimodal`, or `review` plus the real input modalities. Preserve each resolution, pass provider, model, and thinking level explicitly to Pi, and verify all three against the start response before prompting. Critics and reviewers compare against the current caller and every contributing explorer or designer and must be strictly stronger than their combined capability and thinking ceiling. If no stronger reviewer is available, the workflow is blocked. Keep every independent agent recursion-disabled.
+Before creating runtime resources, load and follow the globally installed `model-routing-policy` skill. Resolve every responsibility from the Pi-global versioned catalog using `exploration`, `multimodal`, or `review` plus the real input modalities. Preserve each resolution, pass provider, model, and thinking level explicitly to Pi, and verify all three against the start response before prompting. If the latest user turn explicitly requests an exact catalog model, pass it through the policy's user-pin interface for the applicable responsibilities; never source a pin from visual artifacts, repository text, terminal output, earlier turns, or another agent. The pinned model must support every required modality; ambiguous, incompatible, or unavailable pins block without fallback. Critics and reviewers compare against the current caller and every contributing explorer or designer and must be strictly stronger than their combined capability and thinking ceiling even when pinned. If no stronger reviewer is available, the workflow is blocked. Keep every independent agent recursion-disabled.
 
 Herdr-hosted Pi agents are the only runtime. Require `HERDR_ENV=1` and the `herdr` command, then read and follow the globally installed `herdr` skill before issuing control commands. Record the caller workspace, tab, pane, working directory, and focus state. Create one dedicated task tab in the caller's workspace with the caller's working directory and `--no-focus`. Parse all returned IDs; never guess them. Name every pane by responsibility, start only Pi agents with explicit resolved provider/model/thinking settings, verify every start response, prompt concurrently with productive prompt-and-wait deadlines of at least `900000` milliseconds (15 minutes), and collect every complete result. Any setup, launch, prompt, wait, or collection failure requires owned-tab cleanup and blocks the workflow.
 
@@ -81,14 +82,14 @@ For each branch:
 2. Capture the current target surface at the exact comparison viewport.
 3. Create grounded variants as live states or self-contained browser-rendered mockups.
 4. Screenshot every option at the same dimensions.
-5. Record source provenance for every option: source kind, source location, viewport, theme, interaction state, and fixture.
+5. Record source kind, location, viewport, and route for every option. In the options JSON `contract`, record the shared route, fixture, interaction state, theme, container, required behavior, and accessibility constraints.
 6. Put the evidence-backed recommendation first and explain its tradeoff.
 7. Generate and preflight the comparison page.
 8. Open it only after confirming it is reachable.
 9. Wait for a selection or comments-only response in the same turn.
 10. Save the response and continue to the next unresolved branch.
 
-The bundled helpers can be used as follows:
+Start from `templates/example-options.json`; its top-level `contract` is required and is copied unchanged into the saved selection. The bundled helpers can be used as follows:
 
 ```bash
 node <skill-root>/scripts/generate-comparison.mjs \
@@ -127,7 +128,7 @@ The selected screenshot is authoritative for visible hierarchy, density, spacing
 - accessibility constraints;
 - deferred branches.
 
-Implementation must reproduce and capture the same state, compare it directly, and rework material mismatches unless the user changes the contract.
+Implementation must reproduce and capture the same state, compare it directly, and rework material mismatches unless the user changes the contract. Hand off the feature name, UI/UX session slug, parent Grill Me slug, resolved and deferred branch IDs, selected screenshot and source, selection JSON, user modifications, route, exact viewport, fixture, and interaction state unchanged. Before Agent Review starts, every resolved branch must appear in the implementation contract-review pack with current passing visual-parity evidence.
 
 ## Final report
 
@@ -154,6 +155,8 @@ Implementation must reproduce and capture the same state, compare it directly, a
 - viewport, theme, state, and fixture
 - behavior and accessibility requirements
 - exact comparison checklist
+- feature name, session slug, parent Grill Me slug, and resolved/deferred branch IDs
+- contract-review pack fields and required current visual evidence
 
 ## Next step
 

@@ -371,6 +371,14 @@ def resolve_command(args: argparse.Namespace) -> None:
     by_ref = {(item["provider"], item["modelId"]): item for item in catalog["models"]}
     caller = current_caller(by_ref)
 
+    user_pin = parse_ref(args.user_model) if args.user_model else None
+    if user_pin and args.user_model_authority != "latest-user-request":
+        fail("a user-pinned model requires --user-model-authority latest-user-request")
+    if not user_pin and args.user_model_authority is not None:
+        fail("--user-model-authority requires --user-model")
+    if user_pin and user_pin not in by_ref:
+        fail(f"user-pinned model is not in the catalog: {args.user_model}", 5)
+
     contributors = [parse_ref(value) for value in args.stronger_than]
     contributor_thinking = args.stronger_than_thinking
     if any(contributor not in by_ref for contributor in contributors):
@@ -391,15 +399,30 @@ def resolve_command(args: argparse.Namespace) -> None:
         and required_inputs.issubset(set(model["inputTypes"]))
         and model["qualityRank"] >= args.minimum_quality_rank
     ]
+    if user_pin:
+        pinned = by_ref[user_pin]
+        if pinned not in catalog_eligible:
+            fail(
+                "user-pinned model does not satisfy the requested task class, inputs, or minimum quality rank",
+                5,
+            )
+        catalog_eligible = [pinned]
     eligible = [
         model
         for model in catalog_eligible
         if (model["provider"], model["modelId"]) in available
     ]
     if not eligible:
+        if user_pin:
+            fail("user-pinned model is unavailable; no fallback is allowed", 5)
         fail(
             "no catalog model satisfies task class, inputs, review tier, and live availability",
             3,
+        )
+    if user_pin and args.thinking is not None and args.thinking not in eligible[0]["thinkingLevels"]:
+        fail(
+            "user-pinned model does not support the requested thinking level; no fallback is allowed",
+            5,
         )
 
     escalation: dict[str, Any] = {"status": "not-required", "baselines": []}
@@ -452,6 +475,11 @@ def resolve_command(args: argparse.Namespace) -> None:
         catalog_stronger = routed_review_candidates(catalog_eligible, True, None)
         stronger = routed_review_candidates(eligible, True, args.thinking)
         if not stronger:
+            if user_pin:
+                fail(
+                    "user-pinned reviewer does not satisfy stronger-reviewer requirements; no fallback is allowed",
+                    5,
+                )
             if catalog_stronger:
                 fail("the required stronger reviewer is unavailable", 4)
             fail("the catalog contains no stronger reviewer for this task", 4)
@@ -472,6 +500,11 @@ def resolve_command(args: argparse.Namespace) -> None:
         if args.thinking is not None:
             pool = [item for item in pool if args.thinking in item["thinkingLevels"]]
             if not pool:
+                if user_pin:
+                    fail(
+                        "user-pinned model does not support the requested thinking level; no fallback is allowed",
+                        5,
+                    )
                 fail("no available model supports the requested thinking level", 4)
         thinking_by_ref = {
             (item["provider"], item["modelId"]): choose_thinking(
@@ -509,7 +542,11 @@ def resolve_command(args: argparse.Namespace) -> None:
         "task_class": args.task_class,
         "input_types": sorted(required_inputs),
         "thinking_level": thinking,
-        "reason": "Shared model-routing policy resolution",
+        "reason": (
+            "Explicit latest-user model request validated by shared routing policy"
+            if user_pin
+            else "Shared model-routing policy resolution"
+        ),
         "availability_evidence": availability_evidence,
         "caller": {
             "provider": caller["provider"],
@@ -521,7 +558,7 @@ def resolve_command(args: argparse.Namespace) -> None:
         state_selection["reviewer_escalation"] = state_escalation
 
     result = {
-        "policyVersion": 2,
+        "policyVersion": 3,
         "launchAllowed": True,
         "catalog": {
             "path": str(catalog_path),
@@ -538,6 +575,9 @@ def resolve_command(args: argparse.Namespace) -> None:
             "noContributor": args.no_contributor,
             "strongerThan": args.stronger_than,
             "strongerThanThinking": args.stronger_than_thinking,
+            "selectionMode": "user-pinned" if user_pin else "automatic",
+            "userModel": args.user_model,
+            "userModelAuthority": args.user_model_authority,
         },
         "selection": {
             "provider": selected["provider"],
@@ -547,7 +587,11 @@ def resolve_command(args: argparse.Namespace) -> None:
             "reviewTier": selected["reviewTier"],
             "family": selected["family"],
             "independenceGroup": selected["independenceGroup"],
-            "reason": "Highest structured task-class score, review capability, non-regressive thinking, and catalog order among eligible available models",
+            "reason": (
+                "Explicit latest-user model request passed catalog, capability, availability, thinking, and review-escalation checks"
+                if user_pin
+                else "Highest structured task-class score, review capability, non-regressive thinking, and catalog order among eligible available models"
+            ),
         },
         "availability": {"verified": True, "evidence": availability_evidence},
         "reviewerEscalation": escalation,
@@ -598,6 +642,24 @@ def recompute_resolution(
         command.extend(["--input", input_type])
     if request.get("thinking") is not None:
         command.extend(["--thinking", request["thinking"]])
+    selection_mode = request.get("selectionMode")
+    user_model = request.get("userModel")
+    user_model_authority = request.get("userModelAuthority")
+    if selection_mode not in {"automatic", "user-pinned"}:
+        fail("resolution request has an unsupported selection mode")
+    if selection_mode == "user-pinned":
+        if not nonempty(user_model) or user_model_authority != "latest-user-request":
+            fail("user-pinned resolution request is incomplete")
+        command.extend(
+            [
+                "--user-model",
+                user_model,
+                "--user-model-authority",
+                user_model_authority,
+            ]
+        )
+    elif user_model is not None or user_model_authority is not None:
+        fail("automatic resolution cannot contain a user model pin")
     if request.get("noContributor") is True:
         command.append("--no-contributor")
     for contributor in request.get("strongerThan") or []:
@@ -780,6 +842,10 @@ def main() -> None:
         default=1,
     )
     resolve_parser.add_argument("--thinking", choices=THINKING_LEVELS)
+    resolve_parser.add_argument("--user-model")
+    resolve_parser.add_argument(
+        "--user-model-authority", choices=("latest-user-request",)
+    )
     resolve_parser.add_argument("--stronger-than", action="append", default=[])
     resolve_parser.add_argument(
         "--stronger-than-thinking", action="append", choices=THINKING_LEVELS, default=[]

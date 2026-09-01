@@ -295,6 +295,8 @@ A cancelling task is not complete and its slot cannot be reused. Successful task
 
 ## Integration state
 
+Before reviewer launch, the root writes `contract-review-pack.json` and `evidence/contract-preflight.json` in the canonical run folder. The global Agent Review validator recomputes discovery, exact resolved/deferred branch coverage, current evidence, feature name, and review fingerprint. Both files are digest-bound certification artifacts.
+
 The root records the complete final contract:
 
 ```json
@@ -387,18 +389,20 @@ The root records the complete final contract:
 }
 ```
 
-`changed_files` must exactly match the root's surviving integrated-file result and the worktree delta from the initial snapshot, including file type and mode. Child file lists remain historical and drive collision derivation without forcing reverted edits into the final list. The review base must equal the run base, and every changed file must be inside scope. Every sibling file overlap requires a collision entry resolved with rerun evidence. Review-wave history is append-only and increasing. Reviewer instance IDs must be unique, distinct from all productive/file-changing contributors and coordinator instances, and unused by earlier waves. Current and historical coordinator model settings are preserved and required in every reviewer baseline. Every perspective must preserve its provider/model/thinking choice, stronger-baseline resolution, Herdr Pi start response, and launch-verification artifacts with live SHA-256 digests. Certification rechecks those proofs and requires every implementation contributor in each resolution baseline. If independent review cannot run, completion is blocked.
+`changed_files` must exactly match the root's surviving integrated-file result and the worktree delta from the initial snapshot, including file type and mode. Child file lists remain historical and drive collision derivation without forcing reverted edits into the final list. The review base must equal the run base, and every changed file must be inside scope. Every sibling file overlap requires a collision entry resolved with rerun evidence. Review-wave history is append-only and increasing. Reviewer instance IDs must be unique, distinct from all productive/file-changing contributors and coordinator instances, and unused by earlier waves. Current and historical coordinator model settings are preserved and required in every reviewer baseline. Every perspective must preserve its provider/model/thinking choice, stronger-baseline resolution, Herdr Pi start response, and launch-verification artifact with live SHA-256 digests. Certification rechecks those proofs and requires every implementation contributor in each resolution baseline. If independent review cannot run, completion is blocked.
 
 Each reviewer report contains exact markers:
 
 ```text
 Fingerprint: <current-fingerprint>
+Contract pack: <contract-pack-sha256>
+Contract preflight: <preflight-output-sha256>
 Review wave: <number>
 Reviewer: <agent-id>
 Finding IDs: finding-1, finding-2
 ```
 
-Use `Finding IDs: none` when clean. Structured `review_findings` must exactly match the IDs declared across reports, and every finding must be resolved or rejected with a reason. The combined report contains the fingerprint and wave markers.
+Use `Finding IDs: none` when clean. Structured `review_findings` must exactly match the IDs declared across reports, and every finding must be resolved or rejected with a reason. The combined report contains the fingerprint, contract-pack digest, preflight digest, and wave markers. Certification recomputes contract discovery and evidence validation before accepting these markers.
 
 Automated tests may be skipped only with a reason. A passing test verdict requires current digest-bound test evidence under the run evidence folder. Live interactive behavior verification is separate and user-owned unless the latest request explicitly asks an agent to run it. Use `user-pending` with one current `user-handoff` artifact and a clear reason; this allows implementation closeout without claiming a live pass. An explicitly requested agent-run pass requires current happy, error, and edge artifacts inside the run evidence folder. `not-applicable` is accepted only for a documented documentation-only change whose surviving files are Markdown, text, or reStructuredText. Missing runtime, authentication, fixtures, or credentials blocks only an explicitly requested agent-run test—not a normal user-owned handoff.
 
@@ -410,7 +414,7 @@ After all integration fields and reports are current, run:
 bash <skill-root>/scripts/validate-integration-review.sh <feature-name> --certify
 ```
 
-Certification is bound to the exact state revision, live fingerprint, actual run-owned worktree delta, and SHA-256 digests of distinct review, behavior, runtime-response, and productive-task-output artifacts. Any later state change clears it. `complete-run` recomputes the live fingerprint and worktree delta and rechecks every artifact digest as its final gate before atomically completing the root and run.
+Certification is bound to the exact state revision, live fingerprint, actual run-owned worktree delta, recomputed contract preflight, and SHA-256 digests of the contract pack, preflight output, distinct review, behavior, runtime-response, and productive-task-output artifacts. Any later state change clears it. `complete-run` recomputes the live fingerprint, worktree delta, contract preflight, and every artifact digest as its final gate before atomically completing the root and run.
 
 ## Resume
 

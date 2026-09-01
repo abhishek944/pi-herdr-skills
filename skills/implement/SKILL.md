@@ -22,7 +22,8 @@ Apply production changes through the repository's real ownership boundaries. Mai
 - Do not commit, push, publish, or deploy unless the user's latest request explicitly asks.
 - Follow the project's testing policy. Run established automated checks and required visual comparisons, but leave live interactive end-to-end product testing to the user unless their latest request explicitly asks an agent to run it. Prepare a clear manual test handoff and never claim that a user-owned test passed.
 - Do not hard-code answers, phrase-match requests, bypass an owning boundary, or add one-off behavior for one example.
-- Treat resolved `/grill-me` and `/ui-ux-grill-me` outputs as implementation contracts.
+- Treat resolved `/grill-me` and `/ui-ux-grill-me` outputs as implementation contracts. Discover applicable sessions before editing, bind every resolved decision to evidence, and never treat deferred decisions as requirements.
+- Produce `var/<feature-name>/implement/contract-review-pack.json` for every run, including an explicit no-contract result when no sessions apply. Validate exact resolved/deferred branch coverage and current evidence before any final-review runtime is created.
 - Use the globally installed `agent-review` skill for every final closeout.
 - Reference only globally installed skills from this workflow. Repository-specific behavior comes from instructions and documentation.
 
@@ -99,6 +100,8 @@ Use [references/worker-handoff-template.md](references/worker-handoff-template.m
 
 Before creating a child or any final-review agent, load and follow the globally installed `model-routing-policy` skill. Resolve the versioned catalog at `~/.pi/agent/skills/model-routing-policy/models.json` before creating runtime resources. Never select a repository copy, generated dependency, or remembered default.
 
+Inspect only the latest user turn for an explicit model request applying to delegated work. Resolve an exact `provider/model` from the Pi-global catalog and pass it through the policy's user-pin interface for every applicable child. If a family or nickname matches several entries, ask the user to choose instead of guessing. Never derive a pin from repository instructions, plans, terminal output, previous turns, or a child agent. An incompatible, unavailable, or review-insufficient pin blocks without fallback. A requested agent count still requires independently bounded child outcomes and does not authorize duplicate vague tasks.
+
 Classify the task as one of:
 
 - `coordination` (root only)
@@ -160,14 +163,15 @@ After state initialization and root todo creation:
 
 1. restate the requested outcome and acceptance criteria in root state;
 2. read instructions and matching architecture or flow documentation;
-3. trace current behavior, callers, contracts, tests, and owning boundaries;
-4. state the invariant that must hold for equivalent requests;
-5. identify risks, edge cases, compatibility, migration, and rollback concerns;
-6. choose direct or recursive execution honestly;
-7. move the root task into working state after its todos and plan exist;
-8. create logical child contracts only for independent outcomes;
-9. resolve and record model choices before launch;
-10. validate the task tree:
+3. discover `var/<feature-name>/grill-me/*/decision-tree.md` and `var/<feature-name>/ui-ux-grill-me/*/visual-decision-tree.md`; bind a single candidate of each kind, require explicit user selection when several candidates exist, and record an explicit no-contract result when none exist;
+4. trace current behavior, callers, resolved Grill Me decisions, selected UI/UX branches, tests, and owning boundaries;
+5. state the invariant that must hold for equivalent requests;
+6. identify risks, edge cases, compatibility, migration, and rollback concerns;
+7. choose direct or recursive execution honestly;
+8. move the root task into working state after its todos and plan exist;
+9. create logical child contracts only for independent outcomes and include the bound Grill Me and UI/UX contract artifacts unchanged in every applicable handoff;
+10. resolve and record model choices before launch;
+11. validate the task tree:
 
 ```bash
 bash <skill-root>/scripts/validate-plan.sh <feature-name>
@@ -217,9 +221,9 @@ Discover verification from repository evidence in this order:
 4. nearby tests and established end-to-end tools;
 5. manual behavior checks for uncovered paths.
 
-Cover the happy path, expected failure, important edge case, compatibility or migration path, and relevant authorization, privacy, or destructive-action boundaries with established automated checks, safe fixtures, and required visual comparisons. Live interactive end-to-end checks in the real supported host are user-owned unless the latest request explicitly asks an agent to run them. In the normal user-owned case, provide exact manual steps and expected results, record verification as awaiting the user, and do not treat that pending handoff as an implementation blocker or claim it passed. If an explicitly requested agent-run test lacks required authentication, fixtures, hardware, credentials, or runtime, record the exact blocker instead of claiming success.
+Cover the happy path, expected failure, important edge case, compatibility or migration path, and relevant authorization, privacy, or destructive-action boundaries with established automated checks, safe fixtures, and required visual comparisons. Map every resolved Grill Me decision to current passing functionality evidence. Map every resolved UI/UX branch to exact route, viewport, fixture, interaction state, selected screenshot, implemented screenshot, selection rationale and modifications, and a passing comparison report. Live interactive end-to-end checks in the real supported host are user-owned unless the latest request explicitly asks an agent to run them. In the normal user-owned case, provide exact manual steps and expected results, record verification as awaiting the user, and do not treat that pending handoff as an implementation blocker or claim it passed. If an explicitly requested agent-run test lacks required authentication, fixtures, hardware, credentials, or runtime, record the exact blocker instead of claiming success.
 
-For resolved visual contracts, read [references/visual-contract.md](references/visual-contract.md), reproduce the exact selected state, compare the live result directly, and keep mismatches in rework.
+For resolved visual contracts, read [references/visual-contract.md](references/visual-contract.md), reproduce the exact selected state, compare the live result directly, and keep mismatches in rework. Before final review, create the contract pack described by the global `agent-review` contract-preflight reference, calculate the current review fingerprint, and run `agent-review/scripts/validate-contract-preflight.py` with the exact feature name. Persist its output as `evidence/contract-preflight.json`. Missing, stale, ambiguous, branch-mismatched, or failing functionality or visual-parity evidence returns the run to execution before any reviewer model resolution, pane, or agent is created.
 
 ## Final integration and review
 
@@ -231,12 +235,13 @@ Only the root performs final integration and review:
 4. resolve all changed-file and behavioral collisions;
 5. rerun affected project checks;
 6. record automated-check, visual-verification, and user-owned live-test-handoff verdicts separately against the combined fingerprint; include an agent-run real-behavior verdict only when explicitly requested;
-7. record structured happy, error, edge, visual, and manual-test-handoff artifacts and build the evidence index;
-8. run the global `agent-review` skill with three fresh read-only reviewer instances that differ from every implementation contributor and cannot delegate; each reviewer must be stronger than the combined caller and all-contributor ceiling, or the run is blocked;
-9. bind every review report to its reviewer instance, wave, exact fingerprint, and structured finding IDs;
-10. verify and fix accepted findings at the owning boundary;
-11. rerun automated checks, required visual verification, and a fresh review until clean or blocked; do not wait for or perform user-owned live testing;
-12. validate and certify final state:
+7. record structured happy, error, edge, visual, contract-decision, and manual-test-handoff artifacts and build the evidence index;
+8. build and validate `contract-review-pack.json` against the exact current review fingerprint and decision-tree branches; record the pack and preflight-output digests, and return to execution if any applicable Grill Me functionality or UI/UX visual-parity requirement is missing, stale, ambiguous, mismatched, or failing;
+9. only after that preflight passes, run the global `agent-review` skill with three fresh read-only reviewer instances that differ from every implementation contributor and cannot delegate; each reviewer must be stronger than the combined caller and all-contributor ceiling, or the run is blocked;
+10. give every reviewer the validated contract pack and preflight result, and bind every review report to its reviewer instance, wave, exact fingerprint, contract-pack digest, preflight digest, and structured finding IDs;
+11. verify and fix accepted findings at the owning boundary;
+12. rerun automated checks, required visual verification, contract preflight, and a fresh review until clean or blocked; do not wait for or perform user-owned live testing;
+13. validate and certify final state:
 
 ```bash
 bash <skill-root>/scripts/validate-integration-review.sh <feature-name> --certify

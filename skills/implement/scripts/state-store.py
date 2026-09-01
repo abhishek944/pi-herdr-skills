@@ -13,6 +13,7 @@ import posixpath
 import re
 import secrets
 import subprocess
+import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -306,6 +307,52 @@ def verify_task_output(state: dict[str, Any], runtime: dict[str, Any]) -> None:
         fail("task output is missing or stale")
 
 
+def recompute_contract_preflight(
+    state: dict[str, Any], fingerprint: str, artifact_digests: dict[str, str]
+) -> tuple[str, str]:
+    contract_pack_path = "contract-review-pack.json"
+    contract_preflight_path = "evidence/contract-preflight.json"
+    if contract_pack_path not in artifact_digests or contract_preflight_path not in artifact_digests:
+        fail("certification requires contract pack and preflight artifacts")
+    root = state_directory(state)
+    try:
+        pack = json.loads((root / contract_pack_path).read_text(encoding="utf-8"))
+        stored_preflight = json.loads((root / contract_preflight_path).read_text(encoding="utf-8"))
+        validator = Path(__file__).resolve().parents[2] / "agent-review" / "scripts" / "validate-contract-preflight.py"
+        environment = os.environ.copy()
+        environment["PYTHONDONTWRITEBYTECODE"] = "1"
+        recomputed_preflight = json.loads(
+            subprocess.check_output(
+                [
+                    sys.executable,
+                    str(validator),
+                    "--pack",
+                    str(root / contract_pack_path),
+                    "--repo-root",
+                    state["run"]["repo_root"],
+                    "--feature-name",
+                    state["feature_name"],
+                    "--fingerprint",
+                    fingerprint,
+                ],
+                text=True,
+                stderr=subprocess.STDOUT,
+                env=environment,
+            )
+        )
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as error:
+        fail(f"contract preflight cannot be recomputed: {error}")
+    if (
+        pack.get("featureName") != state["feature_name"]
+        or pack.get("reviewFingerprint") != fingerprint
+        or stored_preflight != recomputed_preflight
+        or recomputed_preflight.get("reviewFingerprint") != fingerprint
+        or (recomputed_preflight.get("pack") or {}).get("sha256") != artifact_digests[contract_pack_path]
+    ):
+        fail("contract pack or preflight is stale for the reviewed change")
+    return artifact_digests[contract_pack_path], artifact_digests[contract_preflight_path]
+
+
 def validate_final_contract(
     state: dict[str, Any], fingerprint: str, artifact_digests: dict[str, str]
 ) -> None:
@@ -319,6 +366,9 @@ def validate_final_contract(
     ):
         if integration.get(field) != fingerprint:
             fail(f"{field} does not match the live fingerprint")
+    contract_pack_digest, contract_preflight_digest = recompute_contract_preflight(
+        state, fingerprint, artifact_digests
+    )
     if integration.get("test_verdict") == "skipped" and not nonempty(
         integration.get("skipped_reason")
     ):
@@ -407,20 +457,24 @@ def validate_final_contract(
             f"Fingerprint: {fingerprint}",
             f"Review wave: {wave}",
             f"Reviewer: {item['agent_id']}",
+            f"Contract pack: {contract_pack_digest}",
+            f"Contract preflight: {contract_preflight_digest}",
         ):
-            if marker not in text:
-                fail(f"{name} report is missing marker: {marker}")
-        line = next(
-            (value for value in text.splitlines() if value.startswith("Finding IDs: ")),
-            None,
-        )
-        if line is None:
-            fail(f"{name} report is missing Finding IDs")
+            label = marker.split(":", 1)[0] + ":"
+            if [line for line in text.splitlines() if line.startswith(label)] != [marker]:
+                fail(f"{name} report requires exactly one marker line: {marker}")
+        finding_lines = [
+            value for value in text.splitlines() if value.startswith("Finding IDs:")
+        ]
+        if len(finding_lines) != 1 or not finding_lines[0].startswith("Finding IDs: "):
+            fail(f"{name} report requires exactly one Finding IDs marker line")
+        line = finding_lines[0]
         raw = line.split(":", 1)[1].strip()
         if raw.lower() != "none":
-            report_ids.update(
-                value.strip() for value in raw.split(",") if value.strip()
-            )
+            values = [value.strip() for value in raw.split(",")]
+            if not values or any(not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value) for value in values):
+                fail(f"{name} Finding IDs marker is empty or malformed")
+            report_ids.update(values)
     if report_ids != structured_ids or any(
         item.get("status") == "open" for item in findings
     ):
@@ -433,11 +487,15 @@ def validate_final_contract(
     if combined not in artifact_digests:
         fail("combined review report digest is missing")
     combined_text = (root / combined).read_text(encoding="utf-8")
-    if (
-        f"Fingerprint: {fingerprint}" not in combined_text
-        or f"Review wave: {wave}" not in combined_text
+    for marker in (
+        f"Fingerprint: {fingerprint}",
+        f"Review wave: {wave}",
+        f"Contract pack: {contract_pack_digest}",
+        f"Contract preflight: {contract_preflight_digest}",
     ):
-        fail("combined review report markers are stale")
+        label = marker.split(":", 1)[0] + ":"
+        if [line for line in combined_text.splitlines() if line.startswith(label)] != [marker]:
+            fail(f"combined review report requires exactly one marker line: {marker}")
     expected_evidence = f"var/{state['feature_name']}/implement/evidence-index.md"
     if (
         integration.get("evidence_index") != expected_evidence
@@ -3146,6 +3204,8 @@ def apply_event(
             )
         required_artifacts = {
             integration.get("combined_report_path"),
+            "contract-review-pack.json",
+            "evidence/contract-preflight.json",
             os.path.relpath(
                 Path(state["run"]["repo_root"]) / integration.get("evidence_index", ""),
                 state_directory(state),
@@ -3256,6 +3316,11 @@ def apply_event(
         if run_owned_files(state) != certification.get("changed_files"):
             fail("run-owned worktree delta moved after certification")
         verify_artifact_digests(state, certification.get("artifact_digests"))
+        recompute_contract_preflight(
+            state,
+            certification.get("fingerprint"),
+            certification.get("artifact_digests"),
+        )
         if state["run"]["phase"] != "review":
             fail("the run must be in review before completion")
         if any(
@@ -3281,6 +3346,11 @@ def apply_event(
         ) or run_owned_files(state) != certification.get("changed_files"):
             fail("worktree changed during final completion checks")
         verify_artifact_digests(state, certification.get("artifact_digests"))
+        recompute_contract_preflight(
+            state,
+            certification.get("fingerprint"),
+            certification.get("artifact_digests"),
+        )
         task["status"] = "done"
         task["phase"] = TASK_PHASES["done"]
         state["run"]["status"] = "complete"

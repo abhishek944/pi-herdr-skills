@@ -39,7 +39,9 @@ Create `var/<feature-name>/ui-ux-grill-me/<slug>/implementation-visual-verificat
 
 Any mismatch keeps the implementation in rework. Lint, a build, DOM assertions,
 or a recording at another state cannot substitute for this comparison. Only an
-explicit user decision may revise the visual contract.
+explicit user decision may revise the visual contract. A written `pass` is not
+sufficient by itself: the selected screenshot, implemented screenshot, selection
+JSON, and comparison report must be digest-bound to the final contract-review pack.
 
 ## Candidate provenance
 
@@ -70,6 +72,21 @@ workers must read the selected screenshot, source artifact, image-generation
 reference, viewport, decision tree, and selection rationale before editing code.
 Do not reconstruct a selected direction from the label or screenshot alone when its
 source artifact is available.
+
+## Contract-review pack
+
+Before final review, add every resolved and deferred branch from the selected UI/UX
+decision tree to `var/<feature-name>/implement/contract-review-pack.json` using the
+schema enforced by the global Agent Review `validate-contract-preflight.py` script.
+For each resolved branch, record the exact route, viewport, fixture, interaction
+state, theme, container, selected source (with a digest-bound mockup file when applicable),
+required behavior, accessibility constraints, exact user modifications, valid selected and implemented PNGs, selection evidence, passing JSON comparison
+report, current review fingerprint, and `userModificationsHonored: true`. Deferred branches
+do not require parity evidence and must not claim a pass.
+
+Run the validator with the exact feature name and persist
+`var/<feature-name>/implement/evidence/contract-preflight.json`. If validation fails,
+return to implementation before reviewer resource creation.
 
 ## Post-code review
 

@@ -18,6 +18,8 @@ Before repository investigation, editing, or delegation, add todos for your task
 
 ## Logical contract
 
+When Grill Me or UI/UX Grill Me sessions apply, read the parent-supplied feature name, session slugs, decision trees, resolved and deferred branch IDs, selected screenshots, selection evidence, user modifications, exact viewport/route/fixture/state, and acceptance criteria before editing. These artifacts are immutable inputs. Report evidence for each applicable resolved decision so the root can build the final contract-review pack; deferred decisions are not requirements.
+
 Your parent-owned task contract contains:
 
 - one outcome;
@@ -55,7 +57,7 @@ If you discover a dependency on a sibling, overlapping behavior, or unsafe concu
 3. Maintain todos throughout.
 4. Run scoped automated checks and required visual comparisons. Leave live interactive end-to-end product testing to the user unless their latest request explicitly asks an agent to run it; otherwise prepare exact manual steps and expected results without claiming a pass.
 5. Collect all descendant results before subtree integration.
-6. Record actual changed files, checks, happy/error/edge evidence, visual evidence, the user-test handoff, risks, and blockers.
+6. Record actual changed files, checks, happy/error/edge evidence, evidence mapped to each resolved Grill Me decision, exact-state visual-parity evidence mapped to each resolved UI/UX branch, the user-test handoff, risks, and blockers.
 7. Confirm descendant runtimes settled before releasing slots.
 8. Close or preserve every exact run-owned resource you created.
 9. Return only after required todos are done, children settle, and your result has no unresolved blockers. Your parent records observed runtime settlement and accepts the task with verification evidence, marking it done and releasing its slot atomically.

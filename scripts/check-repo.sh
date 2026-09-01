@@ -26,8 +26,14 @@ assert "pi" not in package, "this snapshot must not advertise incompatible Pi-pa
 assert package.get("private") is True, "package must remain private to prevent accidental npm publication"
 
 skill_files = sorted((root / "skills").glob("*/SKILL.md"))
-assert len(skill_files) == 13, f"expected 13 skills, found {len(skill_files)}"
+assert len(skill_files) == 14, f"expected 14 skills, found {len(skill_files)}"
 manifest = json.loads((root / "skills-manifest.json").read_text())
+assert set(manifest) == {"snapshot", "skills", "files"}, "unexpected skills manifest schema"
+assert isinstance(manifest["snapshot"], str) and manifest["snapshot"], "manifest snapshot is required"
+assert manifest["skills"] == len(skill_files), "manifest skill count does not match discovered skills"
+assert isinstance(manifest["files"], list), "manifest files must be a list"
+manifest_paths = [item["path"] for item in manifest["files"]]
+assert len(manifest_paths) == len(set(manifest_paths)), "manifest contains duplicate paths"
 expected = {item["path"]: item for item in manifest["files"]}
 actual_paths = {path.relative_to(root).as_posix() for path in (root / "skills").rglob("*") if path.is_file()}
 assert actual_paths == expected.keys(), f"skill file inventory mismatch: {actual_paths ^ expected.keys()}"
@@ -54,11 +60,85 @@ for path in skill_files:
 herdr_policy = (root / "skills/herdr/SKILL.md").read_text()
 assert "at least `900000` milliseconds (15 minutes)" in herdr_policy, "Herdr must enforce the 15-minute minimum productive subagent wait"
 assert "--wait --timeout 900000" in herdr_policy, "Herdr's productive prompt example must use the 15-minute minimum"
+herdr_orchestrator_policy = (root / "skills/herdr-orchestrator/SKILL.md").read_text()
+def markdown_section(text, heading):
+    marker = f"### {heading}\n"
+    assert marker in text, f"missing Herdr orchestrator section: {heading}"
+    return text.split(marker, 1)[1].split("\n### ", 1)[0].split("\n## ", 1)[0]
+
+underspecified_default = markdown_section(herdr_orchestrator_policy, "Underspecified-request default")
+required_default_contracts = [
+    "An underspecified orchestration request is actionable.",
+    "Do not ask the user to choose a mode, scope, sweep type, or next step when the safe defaults above are sufficient.",
+    "Immediately perform one bounded portfolio sweep across every live workspace except the orchestrator workspace",
+    "safely continue any qualifying transient interruption at most once",
+    "surface the complete portfolio report in the visible system browser",
+    "A discovery is not complete until that candidate list has appeared in the browser report.",
+    "Ask the user only after the sweep reveals a concrete human-blocked decision",
+    "No user reply is required when the default sweep can proceed safely.",
+]
+for contract in required_default_contracts:
+    assert contract in underspecified_default, f"incomplete underspecified-request contract: {contract}"
+default_paragraphs = [paragraph.strip() for paragraph in underspecified_default.split("\n\n")]
+authorization_paragraph = next(
+    (paragraph for paragraph in default_paragraphs if paragraph.startswith("Ask the user only after the sweep")),
+    "",
+)
+authorization_contract = "An underspecified request authorizes only the single continuation defined by **Safe transient recovery**; it never authorizes approvals, answers, scope changes, repeated retries, notifications, cleanup, starting follow-up work, or continuous monitoring."
+assert authorization_contract in authorization_paragraph, "underspecified-request authorization boundary must remain in its escalation paragraph"
+recovery_policy = herdr_orchestrator_policy.split("## Safe transient recovery\n", 1)[1].split("\n## Human escalation format", 1)[0]
+required_recovery_contracts = [
+    "An underspecified orchestration request selects `safe-recovery` by default",
+    "temporary infrastructure interruption",
+    "read its immutable session, lifecycle state, and state-change sequence twice",
+    "with the second read immediately before prompting",
+    "Any mismatch cancels recovery.",
+    "zero prior automatic recovery attempts for this incident",
+    "This exception does not permit approvals, answers, managed prompts, or general retries.",
+]
+for contract in required_recovery_contracts:
+    assert contract in recovery_policy, f"incomplete safe transient recovery contract: {contract}"
+idle_discovery = herdr_orchestrator_policy.split("## Proactive idle-workspace discovery\n", 1)[1].split("\n## Completion and follow-up triage", 1)[0]
+required_idle_discovery_contracts = [
+    "A genuinely idle repository is still actionable.",
+    "proactively investigate it read-only instead of merely reporting “idle.”",
+    "Do not ask the user whether discovery should begin.",
+    "Develop two or three evidence-backed feature candidates",
+    "Compare and rank the candidates, recommend one, and explain why it ranks highest.",
+    "At the first eligible discovery, proactively report every candidate compared—not only the recommendation.",
+    "Do not treat a candidate set as surfaced merely because it was stored in the ledger, mentioned only in internal loop state, or reduced to the recommended item.",
+    "Do not suppress the first complete candidate-list report.",
+    "implementation-ready acceptance criteria",
+    "If evidence is too weak, say that no responsible feature recommendation can be made yet",
+    "Suppress only an already surfaced, unchanged candidate set and recommendation for 30 minutes",
+    "Never prompt the idle agent, create a task or workflow, launch a design or implementation agent, edit files, install dependencies, or begin the recommended feature without explicit user approval.",
+    "A recommendation is not authorization.",
+]
+for contract in required_idle_discovery_contracts:
+    assert contract in idle_discovery, f"incomplete proactive idle-workspace discovery contract: {contract}"
+browser_reports = herdr_orchestrator_policy.split("## Visible browser portfolio reports\n", 1)[1].split("\n## Safe transient recovery", 1)[0]
+required_browser_report_contracts = [
+    "Present every non-suppressed portfolio report through a local visual HTML page",
+    "On macOS this means the system `open` command.",
+    "Never use Browser Use to present an orchestrator report.",
+    "A fully suppressed unchanged sweep does not open a redundant page.",
+    "Browser delivery is part of reporting; internal loop state, the ledger, or a chat-only summary does not count as presentation.",
+    "Preflight and open the page over loopback HTTP, never `file://`",
+    "The presenter must verify HTTP 200 before opening the system browser.",
+    "Mark candidate lists as surfaced only after successful browser preflight and open.",
+    "do not claim the report or candidate list was surfaced",
+]
+for contract in required_browser_report_contracts:
+    assert contract in browser_reports, f"incomplete visible browser report contract: {contract}"
+for script in ["open-system-browser.mjs", "present-report.mjs", "report-server.mjs"]:
+    assert (root / "skills/herdr-orchestrator/scripts" / script).is_file(), f"missing browser report script: {script}"
+assert "Never ask the user to select a mode, scope, or sweep when the safe default portfolio pass is enough" in herdr_orchestrator_policy, "safe defaults must prevent setup questions"
 timeout_contracts = [
     "skills/agent-review/SKILL.md",
     "skills/design-council/SKILL.md",
     "skills/discuss/SKILL.md",
     "skills/grill-me/SKILL.md",
+    "skills/herdr-orchestrator/SKILL.md",
     "skills/implement/SKILL.md",
     "skills/implement/references/phase-machine.md",
     "skills/ui-ux-grill-me/SKILL.md",
@@ -100,6 +180,30 @@ PY
     *.mjs) node --check "$file" >/dev/null ;;
   esac
 done < <(find skills scripts -type f -print0)
+
+PYTHONDONTWRITEBYTECODE=1 python3 skills/model-routing-policy/scripts/test-user-pinning.py >/dev/null
+PYTHONDONTWRITEBYTECODE=1 python3 skills/agent-review/scripts/test-contract-preflight.py >/dev/null
+
+python3 - <<'PY'
+from pathlib import Path
+review = Path("skills/agent-review/SKILL.md").read_text()
+implement = Path("skills/implement/SKILL.md").read_text()
+validator = Path("skills/implement/scripts/validate-integration-review.sh").read_text()
+state_store = Path("skills/implement/scripts/state-store.py").read_text()
+ui_generator = Path("skills/ui-ux-grill-me/scripts/generate-comparison.mjs").read_text()
+assert "## Mandatory contract preflight" in review
+assert "before model resolution" in review
+assert "contract-review-pack.json" in implement
+assert "contract preflight" in implement.lower()
+assert "validate-contract-preflight.py" in validator
+assert "matching != [marker]" in validator
+assert "Contract pack:" in validator and "Contract preflight:" in validator
+assert "validate-contract-preflight.py" in state_store
+assert "recompute_contract_preflight(" in state_store
+assert '"contract-review-pack.json"' in state_store
+assert "contract: ${JSON.stringify(config.contract)}" in ui_generator
+assert "contract: config.contract" not in ui_generator
+PY
 
 if find skills -type l -print -quit | grep -q .; then
   fail "skills must not contain symlinks"

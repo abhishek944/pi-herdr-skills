@@ -24,6 +24,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -132,6 +133,38 @@ if live:
 else:
     expected = None
 
+contract_pack_relative = "contract-review-pack.json"
+contract_preflight_relative = "evidence/contract-preflight.json"
+contract_pack_path = os.path.join(state_dir, contract_pack_relative)
+contract_preflight_path = os.path.join(state_dir, contract_preflight_relative)
+contract_pack_digest = None
+contract_preflight_digest = None
+if expected:
+    validator = os.path.join(skills_root, "agent-review/scripts/validate-contract-preflight.py")
+    command = [
+        sys.executable,
+        validator,
+        "--pack", contract_pack_path,
+        "--repo-root", repo_root,
+        "--feature-name", whole["feature_name"],
+        "--fingerprint", expected,
+    ]
+    try:
+        environment = os.environ.copy()
+        environment["PYTHONDONTWRITEBYTECODE"] = "1"
+        recomputed_preflight = json.loads(subprocess.check_output(command, text=True, stderr=subprocess.STDOUT, env=environment))
+        with open(contract_preflight_path, encoding="utf-8") as handle:
+            stored_preflight = json.load(handle)
+        if stored_preflight != recomputed_preflight:
+            errors.append("stored contract preflight is stale or does not match current discovery and evidence")
+        with open(contract_pack_path, "rb") as handle:
+            contract_pack_digest = hashlib.sha256(handle.read()).hexdigest()
+        with open(contract_preflight_path, "rb") as handle:
+            contract_preflight_digest = hashlib.sha256(handle.read()).hexdigest()
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as error:
+        detail = error.output.strip() if isinstance(error, subprocess.CalledProcessError) and error.output else str(error)
+        errors.append(f"contract preflight failed before review certification: {detail}")
+
 normalized_scope = [os.path.normpath(item).replace(os.sep, "/").rstrip("/") or "." for item in paths or []]
 def covered(path):
     return any(scope_item == "." or path == scope_item or path.startswith(scope_item + "/") for scope_item in normalized_scope)
@@ -223,9 +256,17 @@ def contained_file(relative, expected_relative, label):
 combined = contained_file(state.get("combined_report_path"), f"reviews/wave-{wave}-combined.md", "combined review report")
 if combined:
     combined_text = open(os.path.join(state_dir, combined), encoding="utf-8").read()
-    for marker in (f"Fingerprint: {expected}", f"Review wave: {wave}"):
-        if marker not in combined_text:
-            errors.append(f"combined review report is missing marker: {marker}")
+    combined_markers = [f"Fingerprint: {expected}", f"Review wave: {wave}"]
+    if contract_pack_digest and contract_preflight_digest:
+        combined_markers.extend([
+            f"Contract pack: {contract_pack_digest}",
+            f"Contract preflight: {contract_preflight_digest}",
+        ])
+    for marker in combined_markers:
+        label = marker.split(":", 1)[0] + ":"
+        matching = [line for line in combined_text.splitlines() if line.startswith(label)]
+        if matching != [marker]:
+            errors.append(f"combined review report requires exactly one marker line: {marker}")
 required = {
     "correctness_safety": f"reviews/wave-{wave}-correctness.md",
     "architecture_integration": f"reviews/wave-{wave}-architecture.md",
@@ -267,16 +308,28 @@ for name, expected_output in required.items():
     if output:
         outputs.append(output)
         report_text = open(os.path.join(state_dir, output), encoding="utf-8").read()
-        for marker in (f"Fingerprint: {expected}", f"Review wave: {wave}", f"Reviewer: {item.get('agent_id')}"):
-            if marker not in report_text:
-                errors.append(f"{name} output is missing marker: {marker}")
-        finding_line = next((line for line in report_text.splitlines() if line.startswith("Finding IDs: ")), None)
-        if finding_line is None:
-            errors.append(f"{name} output is missing Finding IDs marker")
+        report_markers = [f"Fingerprint: {expected}", f"Review wave: {wave}", f"Reviewer: {item.get('agent_id')}"]
+        if contract_pack_digest and contract_preflight_digest:
+            report_markers.extend([
+                f"Contract pack: {contract_pack_digest}",
+                f"Contract preflight: {contract_preflight_digest}",
+            ])
+        for marker in report_markers:
+            label = marker.split(":", 1)[0] + ":"
+            matching = [line for line in report_text.splitlines() if line.startswith(label)]
+            if matching != [marker]:
+                errors.append(f"{name} output requires exactly one marker line: {marker}")
+        finding_lines = [line for line in report_text.splitlines() if line.startswith("Finding IDs:")]
+        if len(finding_lines) != 1 or not finding_lines[0].startswith("Finding IDs: "):
+            errors.append(f"{name} output requires exactly one Finding IDs marker line")
         else:
-            raw_ids = finding_line.split(":", 1)[1].strip()
+            raw_ids = finding_lines[0].split(":", 1)[1].strip()
             if raw_ids.lower() != "none":
-                report_finding_ids.update(item.strip() for item in raw_ids.split(",") if item.strip())
+                finding_ids = [item.strip() for item in raw_ids.split(",")]
+                if not finding_ids or any(not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", item) for item in finding_ids):
+                    errors.append(f"{name} Finding IDs marker is empty or malformed")
+                else:
+                    report_finding_ids.update(finding_ids)
     for field in ("started_at", "deadline_at"):
         value = item.get(field)
         try:
@@ -318,7 +371,7 @@ if errors:
 task_outputs = [task.get("runtime", {}).get("output_path") for task in whole["tasks"].values() if task.get("runtime", {}).get("productive_prompt") and task.get("runtime", {}).get("output_path")]
 intent_outputs = [intent.get("output_path") for task in whole["tasks"].values() for intent in task.get("runtime_intents", []) if intent.get("status") == "bound" and intent.get("output_path")]
 closure_outputs = [resource.get("closure_artifact") for task in whole["tasks"].values() for resource in task.get("runtime_resources", []) if resource.get("status") == "closed" and resource.get("closure_artifact")]
-artifact_relatives = [combined, *outputs, os.path.relpath(expected_evidence, state_dir), *[item.get("artifact") for item in test_evidence if isinstance(item, dict) and item.get("artifact")], *[item.get("artifact") for item in behavior_evidence if isinstance(item, dict) and item.get("artifact")], *task_outputs, *intent_outputs, *closure_outputs]
+artifact_relatives = [combined, *outputs, contract_pack_relative, contract_preflight_relative, os.path.relpath(expected_evidence, state_dir), *[item.get("artifact") for item in test_evidence if isinstance(item, dict) and item.get("artifact")], *[item.get("artifact") for item in behavior_evidence if isinstance(item, dict) and item.get("artifact")], *task_outputs, *intent_outputs, *closure_outputs]
 artifact_digests = {}
 for relative in artifact_relatives:
     if relative:

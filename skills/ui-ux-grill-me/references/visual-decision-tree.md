@@ -37,7 +37,7 @@ The conductor maintains this artifact at `var/<feature-name>/ui-ux-grill-me/<ses
 
 | ID  | Choice | Variant id | Why | Evidence          |
 | --- | ------ | ---------- | --- | ----------------- |
-| R1  | …      | B or none  | …   | selection-B1.json |
+| B1  | …      | B or none  | …   | selection-B1.json |
 
 ## Deferred
 
@@ -67,7 +67,7 @@ The conductor maintains this artifact at `var/<feature-name>/ui-ux-grill-me/<ses
 2. **One comparison at a time** — wait for feedback before opening the next page; automatic same-turn progression is allowed.
 3. **Current first** — option A is always the captured baseline unless user requests otherwise.
 4. **One axis per branch** — e.g. layout OR CTA prominence, not both.
-5. **Record feedback JSON** — copy `selected`, `label`, and `why` from `selection-B<n>.json` into Resolved. If `submissionType` is `comments-only`, record the branch as rejected/rework-needed with variant `none`.
+5. **Record feedback JSON** — keep the original `B<n>` branch ID and copy `selected`, `label`, and `why` from `selection-B<n>.json` into Resolved. If `submissionType` is `comments-only`, record the branch as rejected/rework-needed with variant `none`.
 6. **Deferral is explicit** — do not skip branches silently.
 
 ## Branch quality bar

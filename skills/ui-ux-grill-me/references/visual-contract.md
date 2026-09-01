@@ -68,8 +68,12 @@ candidate remains the implementation reference.
 Pass the visual contract into the globally installed `implement` skill unchanged. Its coordinator and
 workers must read the selected screenshot, source artifact, image-generation
 reference, viewport, decision tree, and selection rationale before editing code.
-Do not reconstruct a selected direction from the label or screenshot alone when its
-source artifact is available.
+Include the feature name, UI/UX session slug, parent Grill Me slug, and resolved and
+deferred branch IDs. The final visual decision tree must list every branch under
+Resolved or Deferred so review can verify exact coverage. Do not reconstruct a selected direction from the label or
+screenshot alone when its source artifact is available. Every resolved branch must
+be represented in `var/<feature-name>/implement/contract-review-pack.json` and pass
+the global Agent Review contract-preflight validator before reviewer launch.
 
 ## Post-code review
 

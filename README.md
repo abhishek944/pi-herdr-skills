@@ -1,6 +1,6 @@
 # pi-herdr-skills
 
-A portable snapshot of 13 global [Pi](https://pi.dev/) skills for planning, implementation, review, browser work, visual explanations, and [Herdr](https://herdr.dev/)-hosted Pi agents.
+A portable snapshot of 14 global [Pi](https://pi.dev/) skills for planning, implementation, review, browser work, visual explanations, and [Herdr](https://herdr.dev/)-hosted Pi agents.
 
 > [!WARNING]
 > Pi extensions run with your user permissions, and skills can instruct an agent to run commands. Review this repository and every extension you install before enabling it.
@@ -22,7 +22,7 @@ cd pi-herdr-skills
 ./scripts/install.sh
 ```
 
-The installer copies all 13 skills into Pi's global `~/.pi/agent/skills/` directory. It refuses to overwrite a different skill with the same name. If you intentionally replace conflicts, `./scripts/install.sh --force` backs up the existing directories under `~/.pi/agent/skills-backups/` first.
+The installer copies all 14 skills into Pi's global `~/.pi/agent/skills/` directory. It refuses to overwrite a different skill with the same name. If you intentionally replace conflicts, `./scripts/install.sh --force` backs up the existing directories under `~/.pi/agent/skills-backups/` first.
 
 A global copy is required for these workflows because `model-routing-policy` deliberately accepts only Pi's trusted global model catalog. Do not install this repository as a Git-backed Pi package; that package location would make the implementation and review workflows stop at their model-routing safety check.
 
@@ -60,6 +60,7 @@ If an installed skill was modified, uninstall refuses to remove it unless you ad
 | `discuss` | Investigates and debugs a repository without applying a fix. |
 | `grill-me` | Challenges a plan through a browser-based decision interview. |
 | `herdr` | Controls Herdr panes and Herdr-hosted Pi agents when a workflow authorizes it. |
+| `herdr-orchestrator` | Monitors work across Herdr workspaces, safely recovers narrow transient failures, escalates decisions, and suggests grounded follow-ups. |
 | `implement` | Coordinates implementation with task state, Herdr delegation, checks, and review. |
 | `model-routing-policy` | Selects and verifies provider, model, and thinking settings for delegated Pi agents. |
 | `plainspoken-responses` | Keeps user-facing replies clear, friendly, and easy to follow. |
@@ -71,7 +72,7 @@ Some skills depend on other skills in this repository. Install the complete set 
 
 ### Browser workflow prerequisite
 
-`browser-use`, `grill-me`, and `ui-ux-grill-me` require the Browser Use CLI for their browser steps. This snapshot uses the command interface from [`browser-use` 0.12.9](https://github.com/browser-use/browser-use/blob/0.12.9/browser_use/skill_cli/README.md):
+`browser-use` and the automated capture steps in `ui-ux-grill-me` require the Browser Use CLI. Human question and comparison pages in `grill-me` and `ui-ux-grill-me` open through the operating system's visible default browser instead; on macOS they use `open` and never Browser Use. This snapshot uses the command interface from [`browser-use` 0.12.9](https://github.com/browser-use/browser-use/blob/0.12.9/browser_use/skill_cli/README.md):
 
 ```bash
 uv tool install 'browser-use==0.12.9'

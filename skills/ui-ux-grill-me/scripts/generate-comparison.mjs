@@ -23,6 +23,7 @@
  * }
  */
 
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -122,6 +123,24 @@ const configPath = path.isAbsolute(args.options)
   : path.resolve(args.options);
 const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
 
+const contractKeys = [
+  "route",
+  "fixture",
+  "interactionState",
+  "theme",
+  "container",
+  "requiredBehavior",
+  "accessibility",
+];
+if (
+  !config.contract ||
+  Object.keys(config.contract).sort().join(",") !== [...contractKeys].sort().join(",") ||
+  !contractKeys.slice(0, 5).every((key) => typeof config.contract[key] === "string" && config.contract[key].trim()) ||
+  !contractKeys.slice(5).every((key) => Array.isArray(config.contract[key]) && config.contract[key].length && config.contract[key].every((item) => typeof item === "string" && item.trim()))
+) {
+  throw new Error("contract must define route, fixture, interactionState, theme, container, requiredBehavior, and accessibility");
+}
+
 if (!Array.isArray(config.options) || config.options.length !== 6) {
   throw new Error(
     "Comparison config must contain exactly 6 options: current + 3 standard + 2 out-of-the-box.",
@@ -166,6 +185,20 @@ if (provenanceErrors.length) {
   );
 }
 
+const sourceArtifacts = Object.fromEntries(
+  config.options.map((option) => {
+    if (option.source.kind === "live-route") return [option.id, null];
+    const sourcePath = path.resolve(sessionDir, option.source.path);
+    if (!sourcePath.startsWith(`${sessionDir}${path.sep}`) || !fs.statSync(sourcePath, { throwIfNoEntry: false })?.isFile()) {
+      throw new Error(`${option.id}: mockup source must be a file inside the UI/UX session`);
+    }
+    return [option.id, {
+      path: path.relative(process.cwd(), sourcePath).split(path.sep).join("/"),
+      sha256: crypto.createHash("sha256").update(fs.readFileSync(sourcePath)).digest("hex"),
+    }];
+  }),
+);
+
 const missingScreenshots = config.options
   .filter((option) => !fs.existsSync(path.join(sessionDir, option.image)))
   .map((option) => `${option.id}: ${option.image}`);
@@ -184,6 +217,7 @@ const variantMetadata = Object.fromEntries(
       category: option.category,
       image: option.image,
       source: option.source,
+      sourceArtifact: sourceArtifacts[option.id],
     },
   ]),
 );
@@ -532,6 +566,8 @@ const html = `<!DOCTYPE html>
               category: selectedOption.category,
               screenshot: selectedOption.image,
               source: selectedOption.source,
+              sourceArtifact: selectedOption.sourceArtifact,
+              contract: ${JSON.stringify(config.contract)},
             }
           : null,
         timestamp: new Date().toISOString(),

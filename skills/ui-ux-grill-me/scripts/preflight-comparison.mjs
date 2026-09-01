@@ -17,8 +17,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
-import { execFileSync, execSync, spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { openSystemBrowser } from "./open-system-browser.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SAVE_SERVER = path.join(__dirname, "save-server.mjs");
@@ -149,14 +150,10 @@ console.log(`Preflight OK: ${comparisonUrl}`);
 
 if (args.open) {
   try {
-    execFileSync(
-      "browser-use",
-      ["--session", `ui-ux-grill-${args.port}`, "open", comparisonUrl],
-      { stdio: "inherit" },
-    );
-    console.log("Opened through Browser Use.");
+    openSystemBrowser(comparisonUrl);
+    console.log("Opened in the visible system browser.");
   } catch (err) {
-    console.error("Could not open through Browser Use:", err.message);
+    console.error("Could not open the visible system browser:", err.message);
     process.exit(1);
   }
 }

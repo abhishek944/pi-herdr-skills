@@ -1,15 +1,30 @@
 {
-  "snapshot": "2026-08-30",
-  "skills": 13,
+  "snapshot": "2026-08-31",
+  "skills": 14,
   "files": [
     {
       "path": "skills/agent-review/SKILL.md",
-      "sha256": "75aeb69f28bb209b29ea5ac473be50cad8d1ffc8d51d6e7bdbd658f4a0df0206",
+      "sha256": "942413cc072752bbf72e175e24ffc6854b0646ea1e24a175e1bd6e823266c6ce",
+      "executable": false
+    },
+    {
+      "path": "skills/agent-review/references/contract-preflight.md",
+      "sha256": "c405c06b460bf9c6e112184f425676cf2b9cb695c79f4279488c54aae396251d",
       "executable": false
     },
     {
       "path": "skills/agent-review/scripts/review-fingerprint.sh",
       "sha256": "d3385b320d63231872fd057a2f187ab8ccacff30cac3f05df816ca4aca2594fb",
+      "executable": true
+    },
+    {
+      "path": "skills/agent-review/scripts/test-contract-preflight.py",
+      "sha256": "05a48867d2d70a43afd1ba5d213b9120e709268c12cbf6946f23231405057d75",
+      "executable": true
+    },
+    {
+      "path": "skills/agent-review/scripts/validate-contract-preflight.py",
+      "sha256": "b242f85bfc5088dfc52f1217accd6f5f55b8f9ea59eca47a5e20d595d24478b6",
       "executable": true
     },
     {
@@ -34,7 +49,7 @@
     },
     {
       "path": "skills/design-council/SKILL.md",
-      "sha256": "cbec95a3ce5f65b583a3e02acc9c2e39743f4fe71cc5468973cb06fe94853dd3",
+      "sha256": "531e9c8e2004822713025e72965ba48b730fe723e28b59cb6e03a409e19faa58",
       "executable": false
     },
     {
@@ -44,17 +59,17 @@
     },
     {
       "path": "skills/discuss/SKILL.md",
-      "sha256": "b704bb6f1020433c61993000502f6248f3cd8000fb8b6d8d66bddb2b44eacaed",
+      "sha256": "c7ff56a4d5d053eac38bf61daf4c08fee345c354b032f6c89f8a1363ae0992fc",
       "executable": false
     },
     {
       "path": "skills/grill-me/SKILL.md",
-      "sha256": "470c93fffc0e8b2df44324316c0b480d0d18610bb7d57806d15989e6177427ca",
+      "sha256": "cc7d52def96363657272a462acb99707fd7da12b9eda3ba13c1968607c779421",
       "executable": false
     },
     {
       "path": "skills/grill-me/references/decision-tree.md",
-      "sha256": "93baeee8776e2c053585682a501827e19c25b1464eaac1c7a92bea3de55e1a52",
+      "sha256": "699f385b68fdee61114ce0a97262f47808619989fdf83dee2130ea29fd7de655",
       "executable": false
     },
     {
@@ -63,8 +78,13 @@
       "executable": true
     },
     {
+      "path": "skills/grill-me/scripts/open-system-browser.mjs",
+      "sha256": "d74f0b6e3664c3edd0bbc7aa48cf98d6fc7a73d6dfbd205bfb6d8c3f7a008917",
+      "executable": false
+    },
+    {
       "path": "skills/grill-me/scripts/preflight-question.mjs",
-      "sha256": "c54ce58e6847d940d6eeeb3be62d356709dc85d2d013e668fab17b2cc938a86d",
+      "sha256": "4d293ec948ba3bf4a06024caf5f1b0e8a027ab0d516d10b6a4d3b587ee3f0b60",
       "executable": true
     },
     {
@@ -89,32 +109,52 @@
     },
     {
       "path": "skills/herdr/SKILL.md",
-      "sha256": "b30849b096993bb4936386817dcb3514deb09032fe25ebb4ffac517866a7f604",
+      "sha256": "8aa577c6ee8f857e114c8b0d88b236b26cff2d0c5f339ec64fdf1bedf8efdd1d",
       "executable": false
     },
     {
+      "path": "skills/herdr-orchestrator/SKILL.md",
+      "sha256": "8f396081d6fa41817ad75b0d7f193a22844b94e46e2ade2c83174316db992849",
+      "executable": false
+    },
+    {
+      "path": "skills/herdr-orchestrator/scripts/open-system-browser.mjs",
+      "sha256": "ec8aba0d19e3fddb3a993cb5a62165849349306d5fce450a5f2362a0ea36b5f9",
+      "executable": false
+    },
+    {
+      "path": "skills/herdr-orchestrator/scripts/present-report.mjs",
+      "sha256": "6f003aef74d3abe630aa5076344dd2abe025a4ac0c4083646bd27417c32cf72c",
+      "executable": true
+    },
+    {
+      "path": "skills/herdr-orchestrator/scripts/report-server.mjs",
+      "sha256": "d2c8c247ca2c89ca8c87603cdf70320a3c99cbdda7c3b9f5df6b31b9c2c63331",
+      "executable": true
+    },
+    {
       "path": "skills/implement/SKILL.md",
-      "sha256": "0cf59bd0315e02f89717dbdc831dbd3d3e8df5a41fa2f1450d8ba09a055201ad",
+      "sha256": "2832a70daa3ad70ecb5c1eca2937e0696572e3bf206cc69906c5d8b3d8b54348",
       "executable": false
     },
     {
       "path": "skills/implement/references/phase-machine.md",
-      "sha256": "7f966ccb1470d9e959d0c325ab221ba49093cf41387a25924f30450f04defbc4",
+      "sha256": "634c5218c751bdd3d4ab07bbd688883d403aae1ef0652bacd3807ae017c11c4d",
       "executable": false
     },
     {
       "path": "skills/implement/references/state-schema.md",
-      "sha256": "5dab51e1985503823d646efde20474e2da6fc4f60786b06dbc99461e091768be",
+      "sha256": "c10cf2f972d2441368afb9a302385c632294b768a468e266e6ed58215fe8dec1",
       "executable": false
     },
     {
       "path": "skills/implement/references/visual-contract.md",
-      "sha256": "8d6bffb499fa2359dc3e225e371d8804e111097d124e510c4c0ce05a3ed0616e",
+      "sha256": "bb4009b89456a716d92df2eed7edffd3596af1f2566798e0c915bc6951b1cc6a",
       "executable": false
     },
     {
       "path": "skills/implement/references/worker-handoff-template.md",
-      "sha256": "56173d1acff51f99b19c2943d39220c2ffe2ee80963ae72fc63307de32981253",
+      "sha256": "4dd1c740495b653d212615bc57ff3dd400c1eed8be0bc1edbb96bd7bc61661f1",
       "executable": false
     },
     {
@@ -124,12 +164,12 @@
     },
     {
       "path": "skills/implement/scripts/state-store.py",
-      "sha256": "d3e26193eaed27780592eca386e16ab940aaa6b6ec64f2cce4c7b6202429a990",
+      "sha256": "8c916930b916df2bbd64ba4cf041a11784d95bb3a39cc5862732dcc800a38513",
       "executable": true
     },
     {
       "path": "skills/implement/scripts/validate-integration-review.sh",
-      "sha256": "d8dff0aac9fb9b5f2970e3cf95119df9ba878a1da2433847d3e8213fadf8393b",
+      "sha256": "3a25ad7764db83e2c912c8035402d67caffb26fcb1fcd2e62fff6109a2e9cb8b",
       "executable": true
     },
     {
@@ -139,17 +179,22 @@
     },
     {
       "path": "skills/model-routing-policy/SKILL.md",
-      "sha256": "097a10840a261ca1b7e8ac4054de4c593c09cdab4f83add7bdf2ff51d98ce8f5",
+      "sha256": "2cac9dd28a165017b6377217b5c2018290bdc9b21d69e6eae825364f24f0e19d",
       "executable": false
     },
     {
       "path": "skills/model-routing-policy/models.json",
-      "sha256": "050d81fbb9fecef96fe9b6ab893f2262b2602dc143a3611c0d3d7c460c2aad0b",
+      "sha256": "c5cea965678f452d48a5671f7f51503bf8e631abed421c3b1b013d893c672ffd",
       "executable": false
     },
     {
       "path": "skills/model-routing-policy/scripts/model-routing.py",
-      "sha256": "5bce2f6d068c04ce28b55bee7084a956cb37d0dee297165d765b3695d4e0b65a",
+      "sha256": "16d0364c878db929490b1a2900a8803b6e50b7d2ef3db7c9db3646bc7c91817e",
+      "executable": true
+    },
+    {
+      "path": "skills/model-routing-policy/scripts/test-user-pinning.py",
+      "sha256": "88c5185a4cd22601eb4430c11d0752d8084b68c744db01101789aca274013251",
       "executable": true
     },
     {
@@ -169,17 +214,17 @@
     },
     {
       "path": "skills/ui-ux-grill-me/SKILL.md",
-      "sha256": "ad7f3208b22108c289fbb8b8be1cc77856e745ff194e5efcd2bda68b8c00cdba",
+      "sha256": "dc3d0ae67dd8ce8f3b4396d2ae66b8ca1dcef77790784d84aa0d87339321ebd7",
       "executable": false
     },
     {
       "path": "skills/ui-ux-grill-me/references/visual-contract.md",
-      "sha256": "00bc4f76a65d2ce7d1ca5f1cf5c800c2c11663f979d09c5fa799bd7ca09c154a",
+      "sha256": "88b74fdc5b7b1d33659b24a6e9419c8b43636a8e04c596c03ccb422e20af7107",
       "executable": false
     },
     {
       "path": "skills/ui-ux-grill-me/references/visual-decision-tree.md",
-      "sha256": "283027d3c852b815f3a45811d9c00377790c9e226cb312dcce552dce5e152d2a",
+      "sha256": "109f3aa5f8b4d109f6d4c05b5a2847964d9077efc746b61341d8f74a2c71ceb5",
       "executable": false
     },
     {
@@ -189,12 +234,17 @@
     },
     {
       "path": "skills/ui-ux-grill-me/scripts/generate-comparison.mjs",
-      "sha256": "b1c55cfbcd2a21cb825ce424c52ce839f8ef6c54ce98183562fa2835bc19699a",
+      "sha256": "b19f2c8aa567ffd86d23007887abfec684b9077148edff794a4fa7cb0dde2afe",
       "executable": true
     },
     {
+      "path": "skills/ui-ux-grill-me/scripts/open-system-browser.mjs",
+      "sha256": "d74f0b6e3664c3edd0bbc7aa48cf98d6fc7a73d6dfbd205bfb6d8c3f7a008917",
+      "executable": false
+    },
+    {
       "path": "skills/ui-ux-grill-me/scripts/preflight-comparison.mjs",
-      "sha256": "456b43073967784ef81512df9264e86866fb99068fe8b143aa8001543b676758",
+      "sha256": "d8a2c742ed847a24a50483c6eff82d7fdc791b0dd535b183b730d04f984dd79f",
       "executable": true
     },
     {
@@ -209,7 +259,7 @@
     },
     {
       "path": "skills/ui-ux-grill-me/templates/example-options.json",
-      "sha256": "2d4f1c1aa987a863a71c62a318f227d673bd2f4d106b33de525a3fe033d28b39",
+      "sha256": "cd54af57ed6dc449a39877a5ad30f939081e03f712b5aac5a83e420b60518116",
       "executable": false
     },
     {

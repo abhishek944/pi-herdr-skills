@@ -1,5 +1,14 @@
 {
   "recommended": "A",
+  "contract": {
+    "route": "<ROUTE>",
+    "fixture": "<FIXTURE>",
+    "interactionState": "<INTERACTION_STATE>",
+    "theme": "<THEME>",
+    "container": "<CONTAINER>",
+    "requiredBehavior": ["<REQUIRED_BEHAVIOR>"],
+    "accessibility": ["<ACCESSIBILITY_REQUIREMENT>"]
+  },
   "referenceImages": [
     {
       "role": "art-direction-reference",
@@ -18,7 +27,7 @@
         "kind": "live-route",
         "path": "http://localhost:<UI_PORT>/",
         "viewport": "<WIDTH>x<HEIGHT>",
-        "route": "http://localhost:<UI_PORT>/"
+        "route": "<ROUTE>"
       }
     },
     {

@@ -24,7 +24,12 @@ The conductor maintains this artifact at `var/<feature-name>/grill-me/<session-s
 
 | ID  | Decision | Rationale | Evidence                   |
 | --- | -------- | --------- | -------------------------- |
-| R1  | …        | …         | codebase / user / web / DB |
+| B1  | …        | …         | codebase / user / web / DB |
+
+## Deferred
+
+| ID | Reason | When |
+| -- | ------ | ---- |
 
 ## Blocked (needs user)
 
@@ -48,7 +53,7 @@ The conductor maintains this artifact at `var/<feature-name>/grill-me/<session-s
 1. **Depth-first on dependencies** — resolve parent branches before children.
 2. **One browser question at a time** — wait for Submit, record the response, then advance automatically in the same turn.
 3. **Ground before ask** — if the answer might live in the repository, logs, data store, runtime, or documentation, gather that evidence first; only ask the user what remains unknown. When using any independent agent, follow the parent skill's Herdr-first runtime policy.
-4. **Mark resolution** — when the user answers, move the row from Open → Resolved and record rationale.
+4. **Mark resolution** — when the user answers, move the row from Open → Resolved without changing its branch ID, and record rationale.
 5. **Split on fork** — when the user picks an option that opens sub-branches, add child rows before continuing.
 6. **Deferral is explicit** — `deferred: <reason>` is allowed; do not silently skip branches.
 
