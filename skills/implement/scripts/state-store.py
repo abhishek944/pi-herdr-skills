@@ -90,7 +90,7 @@ HARD_LIMITS = {
     "max_children_per_task": 6,
     "max_total_tasks": 18,
     "max_active_agents": 6,
-    "max_retries_per_task": 0,
+    "max_retries_per_task": 31,
 }
 GLOBAL_MODEL_CATALOG = (
     Path.home() / ".pi" / "agent" / "skills" / "model-routing-policy" / "models.json"
@@ -894,7 +894,220 @@ def validate_resolution_artifact(
         or payload_catalog.get("catalogVersion") != catalog.get("catalog_version")
     ):
         fail("model resolution artifact does not match the bound Pi-global catalog")
+    policy_version = payload.get("policyVersion")
+    request = payload.get("request") or {}
+    if policy_version == 3:
+        if "excludedModels" in request or "fallbackFrom" in request:
+            fail("legacy model resolution artifact contains unsupported fallback provenance")
+    elif policy_version == 5:
+        excluded = request.get("excludedModels")
+        fallback = request.get("fallbackFrom")
+        if (
+            not isinstance(excluded, list)
+            or len(excluded) != len(set(excluded))
+            or (fallback is None and excluded)
+            or (fallback is not None and not excluded)
+        ):
+            fail("model resolution artifact has invalid fallback provenance")
+        if fallback is not None:
+            if not isinstance(fallback, dict) or set(fallback) != {
+                "previousResolution",
+                "failureEvidence",
+                "cleanupEvidence",
+            }:
+                fail("model resolution artifact has malformed fallback provenance")
+            for value in fallback.values():
+                if (
+                    not isinstance(value, dict)
+                    or set(value) != {"path", "digest"}
+                    or not nonempty(value.get("path"))
+                    or not valid_hash(value.get("digest"))
+                ):
+                    fail("model resolution artifact has incomplete fallback provenance")
+    else:
+        fail("model resolution artifact uses an unsupported routing policy version")
     return {"path": path, "digest": digest}
+
+
+def validate_fallback_evidence(
+    state: dict[str, Any], task: dict[str, Any], resolution_artifact: Any
+) -> tuple[dict[str, str], dict[str, str]]:
+    _, _, payload = read_run_artifact(
+        state, resolution_artifact, "fallback model resolution artifact"
+    )
+    request = payload.get("request") or {}
+    fallback = request.get("fallbackFrom")
+    if not isinstance(fallback, dict) or set(fallback) != {
+        "previousResolution",
+        "failureEvidence",
+        "cleanupEvidence",
+    }:
+        fail("fallback resolution must bind prior resolution, failure, and cleanup evidence")
+    previous = fallback["previousResolution"]
+    active_resolution = task.get("active_resolution") or {}
+    expected_previous_path = (state_directory(state) / active_resolution.get("path", "")).resolve()
+    if (
+        not isinstance(previous, dict)
+        or Path(previous.get("path", "")).expanduser().resolve() != expected_previous_path
+        or previous.get("digest") != active_resolution.get("digest")
+    ):
+        fail("fallback resolution does not continue the task's active resolution")
+    _, _, previous_payload = read_run_artifact(
+        state, active_resolution, "previous model resolution artifact"
+    )
+    previous_request = previous_payload.get("request") or {}
+    zone_keys = {
+        "taskClass",
+        "inputTypes",
+        "minimumQualityRank",
+        "thinking",
+        "noContributor",
+        "strongerThan",
+        "strongerThanThinking",
+        "selectionMode",
+        "userModel",
+        "userModelAuthority",
+    }
+    if (
+        any(request.get(key) != previous_request.get(key) for key in zone_keys)
+        or payload.get("caller") != previous_payload.get("caller")
+    ):
+        fail("fallback resolution changes the task's routing zone or caller baseline")
+    previous_selected = previous_payload.get("selection") or {}
+    expected_excluded = list(previous_request.get("excludedModels") or []) + [
+        f"{previous_selected.get('provider')}/{previous_selected.get('modelId')}"
+    ]
+    if request.get("excludedModels") != expected_excluded:
+        fail("fallback resolution does not cumulatively exclude exactly the prior selection")
+
+    normalized_refs: list[dict[str, str]] = []
+    payloads: list[dict[str, Any]] = []
+    for key, label in (
+        ("failureEvidence", "fallback failure evidence"),
+        ("cleanupEvidence", "fallback cleanup evidence"),
+    ):
+        artifact = fallback[key]
+        try:
+            relative = Path(artifact.get("path", "")).expanduser().resolve().relative_to(
+                state_directory(state).resolve()
+            )
+        except (AttributeError, ValueError):
+            fail(f"{label} must live under the implementation run folder")
+        normalized = {"path": relative.as_posix(), "digest": artifact.get("digest")}
+        _, _, artifact_payload = read_run_artifact(state, normalized, label)
+        normalized_refs.append(normalized)
+        payloads.append(artifact_payload)
+
+    failure, cleanup = payloads
+    runtime = task.get("runtime") or {}
+    active_model = task.get("active_model") or {}
+    if (
+        set(failure) != {
+            "classification",
+            "reasonCode",
+            "failedModel",
+            "agentSessionId",
+            "paneId",
+            "usableContribution",
+            "sideEffects",
+            "launchVerification",
+            "runtimeOutput",
+        }
+        or failure.get("classification") != "model-specific-no-contribution"
+        or failure.get("reasonCode") not in {
+            "quota",
+            "capacity",
+            "rate-limit",
+            "authentication",
+            "availability",
+        }
+        or failure.get("failedModel")
+        != f"{active_model.get('provider')}/{active_model.get('model_id')}"
+        or failure.get("usableContribution") is not False
+        or failure.get("sideEffects") is not False
+        or failure.get("agentSessionId") != runtime.get("agent_instance_id")
+        or failure.get("paneId") != runtime.get("pane_id")
+    ):
+        fail("fallback failure evidence does not prove zero contribution for this runtime")
+    if (
+        set(cleanup) != {
+            "agentSessionId",
+            "paneId",
+            "agentStopped",
+            "paneClosed",
+            "remainingActive",
+            "closureResponse",
+            "absenceResponse",
+        }
+        or cleanup.get("agentSessionId") != runtime.get("agent_instance_id")
+        or cleanup.get("paneId") != runtime.get("pane_id")
+        or cleanup.get("agentStopped") is not True
+        or cleanup.get("paneClosed") is not True
+        or cleanup.get("remainingActive") is not False
+    ):
+        fail("fallback cleanup evidence does not prove this runtime was removed")
+
+    def normalized_nested(value: Any, label: str) -> dict[str, str]:
+        if not isinstance(value, dict) or set(value) != {"path", "digest"}:
+            fail(f"{label} must include path and digest")
+        try:
+            relative = Path(value["path"]).expanduser().resolve().relative_to(
+                state_directory(state).resolve()
+            )
+        except (KeyError, TypeError, ValueError):
+            fail(f"{label} must live under the implementation run folder")
+        reference = {"path": relative.as_posix(), "digest": value.get("digest")}
+        read_run_artifact(state, reference, label)
+        return reference
+
+    launch_ref = normalized_nested(
+        failure.get("launchVerification"), "fallback launch verification"
+    )
+    output_ref = normalized_nested(failure.get("runtimeOutput"), "fallback runtime output")
+    closure_ref = normalized_nested(cleanup.get("closureResponse"), "fallback closure response")
+    _, _, closure = read_run_artifact(state, closure_ref, "fallback closure response")
+    if (
+        closure.get("id") not in {"cli:pane:close", "cli:tab:close"}
+        or (closure.get("result") or {}).get("type") != "ok"
+    ):
+        fail("fallback closure response is not a successful Herdr close")
+    absence_ref = normalized_nested(cleanup.get("absenceResponse"), "fallback pane absence response")
+    _, _, absence = read_run_artifact(state, absence_ref, "fallback pane absence response")
+    if (
+        absence.get("id") != "cli:pane:get"
+        or (absence.get("error") or {}).get("code") != "pane_not_found"
+        or (absence.get("error") or {}).get("message")
+        != f"pane {runtime.get('pane_id')} not found"
+    ):
+        fail("fallback cleanup does not prove the exact failed pane is absent")
+    if launch_ref != runtime.get("launch_verification") or (
+        output_ref.get("path") != runtime.get("output_path")
+        or output_ref.get("digest") != runtime.get("output_digest")
+    ):
+        fail("fallback evidence is not bound to this task's launch and output")
+    target = task.get("id")
+    target_intent_ids = {
+        intent.get("id")
+        for owner in state.get("tasks", {}).values()
+        for intent in owner.get("runtime_intents", [])
+        if intent.get("target_task_id") == target
+        and intent.get("attempt", 1) == task.get("attempts")
+    }
+    linked_resources = [
+        resource
+        for owner in state.get("tasks", {}).values()
+        for resource in owner.get("runtime_resources", [])
+        if resource.get("intent_id") in target_intent_ids
+    ]
+    if not linked_resources or any(resource.get("status") != "closed" for resource in linked_resources):
+        fail("fallback requires all resources from this attempt to be closed")
+    if not any(
+        resource.get("closure_artifact") == closure_ref["path"]
+        and resource.get("closure_digest") == closure_ref["digest"]
+        for resource in linked_resources
+    ):
+        fail("fallback closure evidence is not bound to a closed runtime resource")
+    return normalized_refs[0], normalized_refs[1]
 
 
 def validate_launch_verification_artifact(
@@ -978,6 +1191,11 @@ def validate_launch_verification_artifact(
         "sessionIdentity"
     ) != runtime.get("agent_instance_id"):
         fail("launch verification session identity does not match the runtime")
+    if (
+        active_resolution.get("policyVersion") == 5
+        and evidence.get("paneIdentity") != runtime.get("pane_id")
+    ):
+        fail("launch verification pane identity does not match the runtime")
     return {"path": path, "digest": digest}
 
 
@@ -1241,6 +1459,7 @@ def task_template(
             "agent_instance_id": None,
             "pane_id": None,
             "productive_prompt": False,
+            "usable_contribution": False,
             "status": "not-started",
         },
         "runtime_history": [],
@@ -1433,7 +1652,7 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
     seen_todos: set[str] = set()
     seen_resources: set[str] = set()
     seen_agent_instances: set[str] = set()
-    agent_intent_targets: set[str] = set()
+    agent_intent_targets: set[tuple[str, int]] = set()
     for task_id, task in tasks.items():
         if not TASK_ID_RE.fullmatch(task_id) or task.get("id") != task_id:
             fail(f"invalid task ID or key: {task_id}")
@@ -1462,12 +1681,13 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
         if task.get("status") not in TASK_STATUSES:
             fail(f"task {task_id} has invalid status")
         attempts = task.get("attempts")
+        max_attempts = limits["max_retries_per_task"] + 1
         if (
             isinstance(attempts, bool)
             or not isinstance(attempts, int)
-            or attempts not in {0, 1}
+            or not 0 <= attempts <= max_attempts
         ):
-            fail(f"task {task_id} attempts must be 0 or 1")
+            fail(f"task {task_id} attempts must be between 0 and {max_attempts}")
         if task.get("phase") != TASK_PHASES[task["status"]]:
             fail(f"task {task_id} has an invalid status/phase pair")
         if task.get("task_class") not in TASK_CLASSES:
@@ -1529,6 +1749,7 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
         if (
             not isinstance(runtime, dict)
             or runtime.get("status") not in RUNTIME_STATUSES
+            or not isinstance(runtime.get("usable_contribution", False), bool)
         ):
             fail(f"task {task_id} has invalid runtime state")
         if (
@@ -1539,10 +1760,11 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
             fail(f"task {task_id} has runtime activity before its only launch attempt")
         if (
             task_id != root_id
-            and attempts == 1
+            and attempts > 0
+            and task.get("status") in {"launching", "working", "waiting", "integrating", "done"}
             and runtime.get("status") == "not-started"
         ):
-            fail(f"task {task_id} consumed its launch attempt without runtime evidence")
+            fail(f"task {task_id} has no runtime evidence for its active attempt")
         if (
             task_id != root_id
             and attempts == 0
@@ -1568,10 +1790,173 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
                 state, task, runtime.get("launch_verification")
             ) != runtime.get("launch_verification"):
                 fail(f"task {task_id} launch verification artifact is not normalized")
-        if task.get("runtime_history") != []:
-            fail(
-                f"task {task_id} runtime_history must remain empty because retries are disabled"
+        runtime_history = task.get("runtime_history")
+        if not isinstance(runtime_history, list) or len(runtime_history) != max(0, attempts - 1):
+            fail(f"task {task_id} runtime_history must record every replaced attempt")
+        for expected_attempt, item in enumerate(runtime_history, start=1):
+            if (
+                not isinstance(item, dict)
+                or set(item) != {
+                    "attempt",
+                    "model_selection",
+                    "model_resolution",
+                    "runtime",
+                    "failure_evidence",
+                    "cleanup_evidence",
+                }
+                or item.get("attempt") != expected_attempt
+            ):
+                fail(f"task {task_id} has invalid fallback history")
+            historical_runtime = item.get("runtime") or {}
+            historical_instance = historical_runtime.get("agent_instance_id")
+            if not nonempty(historical_instance) or historical_instance in seen_agent_instances:
+                fail(f"task {task_id} fallback history reuses or omits an agent session")
+            seen_agent_instances.add(historical_instance)
+            historical_selection = validate_model_selection(
+                item.get("model_selection"), task["task_class"], require_thinking=catalog_bound
             )
+            if validate_resolution_artifact(
+                state, item.get("model_resolution"), historical_selection
+            ) != item.get("model_resolution"):
+                fail(f"task {task_id} historical model resolution is not normalized")
+            _, _, historical_failure = read_run_artifact(
+                state, item.get("failure_evidence"), "fallback failure evidence"
+            )
+            _, _, historical_cleanup = read_run_artifact(
+                state, item.get("cleanup_evidence"), "fallback cleanup evidence"
+            )
+            historical_intents = {
+                intent.get("id")
+                for owner in tasks.values()
+                for intent in owner.get("runtime_intents", [])
+                if intent.get("target_task_id") == task_id
+                and intent.get("attempt", 1) == expected_attempt
+            }
+            historical_resources = [
+                resource
+                for owner in tasks.values()
+                for resource in owner.get("runtime_resources", [])
+                if resource.get("intent_id") in historical_intents
+            ]
+            if not historical_resources or any(
+                resource.get("status") != "closed" for resource in historical_resources
+            ):
+                fail(f"task {task_id} historical fallback resources are not closed")
+            historical_model = item.get("model_selection") or {}
+            if (
+                set(historical_failure) != {
+                    "classification",
+                    "reasonCode",
+                    "failedModel",
+                    "agentSessionId",
+                    "paneId",
+                    "usableContribution",
+                    "sideEffects",
+                    "launchVerification",
+                    "runtimeOutput",
+                }
+                or historical_failure.get("classification")
+                != "model-specific-no-contribution"
+                or historical_failure.get("reasonCode")
+                not in {"quota", "capacity", "rate-limit", "authentication", "availability"}
+                or historical_failure.get("failedModel")
+                != f"{historical_model.get('provider')}/{historical_model.get('model_id')}"
+                or historical_failure.get("agentSessionId")
+                != historical_runtime.get("agent_instance_id")
+                or historical_failure.get("paneId") != historical_runtime.get("pane_id")
+                or historical_failure.get("usableContribution") is not False
+                or historical_failure.get("sideEffects") is not False
+            ):
+                fail(f"task {task_id} historical failure evidence is invalid")
+            if (
+                set(historical_cleanup) != {
+                    "agentSessionId",
+                    "paneId",
+                    "agentStopped",
+                    "paneClosed",
+                    "remainingActive",
+                    "closureResponse",
+                    "absenceResponse",
+                }
+                or historical_cleanup.get("agentSessionId")
+                != historical_runtime.get("agent_instance_id")
+                or historical_cleanup.get("paneId") != historical_runtime.get("pane_id")
+                or historical_cleanup.get("agentStopped") is not True
+                or historical_cleanup.get("paneClosed") is not True
+                or historical_cleanup.get("remainingActive") is not False
+            ):
+                fail(f"task {task_id} historical cleanup evidence is invalid")
+            historical_launch = historical_failure.get("launchVerification") or {}
+            historical_output = historical_failure.get("runtimeOutput") or {}
+            historical_closure = historical_cleanup.get("closureResponse") or {}
+            historical_absence = historical_cleanup.get("absenceResponse") or {}
+            try:
+                history_root = state_directory(state).resolve()
+                historical_launch_path = Path(historical_launch.get("path", "")).expanduser().resolve().relative_to(history_root).as_posix()
+                historical_output_path = Path(historical_output.get("path", "")).expanduser().resolve().relative_to(history_root).as_posix()
+                historical_closure_path = Path(historical_closure.get("path", "")).expanduser().resolve().relative_to(history_root).as_posix()
+                historical_absence_path = Path(historical_absence.get("path", "")).expanduser().resolve().relative_to(history_root).as_posix()
+            except (TypeError, ValueError):
+                fail(f"task {task_id} historical nested evidence is outside the run")
+            historical_launch_ref = {
+                "path": historical_launch_path,
+                "digest": historical_launch.get("digest"),
+            }
+            _, _, historical_launch_payload = read_run_artifact(
+                state,
+                historical_launch_ref,
+                "historical fallback launch verification",
+            )
+            historical_task = copy.deepcopy(task)
+            historical_task["runtime"] = historical_runtime
+            historical_task["active_resolution"] = item.get("model_resolution")
+            historical_task["active_model"] = {
+                "provider": historical_model.get("provider"),
+                "model_id": historical_model.get("model_id"),
+                "thinking_level": historical_model.get("thinking_level"),
+                "source": "primary" if expected_attempt == 1 else "fallback",
+            }
+            validate_launch_verification_artifact(
+                state, historical_task, historical_launch_ref
+            )
+            read_run_artifact(
+                state,
+                {"path": historical_output_path, "digest": historical_output.get("digest")},
+                "historical fallback runtime output",
+            )
+            _, _, historical_closure_payload = read_run_artifact(
+                state,
+                {"path": historical_closure_path, "digest": historical_closure.get("digest")},
+                "historical fallback closure response",
+            )
+            _, _, historical_absence_payload = read_run_artifact(
+                state,
+                {"path": historical_absence_path, "digest": historical_absence.get("digest")},
+                "historical fallback pane absence",
+            )
+            if (
+                historical_launch_payload.get("verified") is not True
+                or historical_launch_payload.get("expected")
+                != {
+                    "provider": historical_model.get("provider"),
+                    "model": historical_model.get("model_id"),
+                    "thinking": historical_model.get("thinking_level"),
+                }
+                or historical_closure_payload.get("id")
+                not in {"cli:pane:close", "cli:tab:close"}
+                or (historical_closure_payload.get("result") or {}).get("type") != "ok"
+                or historical_absence_payload.get("id") != "cli:pane:get"
+                or (historical_absence_payload.get("error") or {}).get("code") != "pane_not_found"
+                or (historical_absence_payload.get("error") or {}).get("message")
+                != f"pane {historical_runtime.get('pane_id')} not found"
+            ):
+                fail(f"task {task_id} historical launch or absence proof is invalid")
+            if not any(
+                resource.get("closure_artifact") == historical_closure_path
+                and resource.get("closure_digest") == historical_closure.get("digest")
+                for resource in historical_resources
+            ):
+                fail(f"task {task_id} historical closure evidence no longer matches its resource")
         model = task.get("model_selection")
         if model is not None:
             validate_model_selection(
@@ -1590,10 +1975,11 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
                 fail(f"task {task_id} has invalid active_model")
             if catalog_bound and not nonempty(active_model.get("thinking_level")):
                 fail(f"task {task_id} active_model lacks thinking provenance")
-            if active_model.get("source") != "primary" or task.get(
+            expected_source = "fallback" if runtime_history else "primary"
+            if active_model.get("source") != expected_source or task.get(
                 "active_resolution"
             ) != task.get("model_resolution"):
-                fail(f"task {task_id} must use its original model resolution")
+                fail(f"task {task_id} active model source or resolution is invalid")
             if (active_model["provider"], active_model["model_id"]) != (
                 model["provider"],
                 model["model_id"],
@@ -1775,9 +2161,17 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
                 )
             if intent.get("kind") == "agent":
                 target_task_id = intent.get("target_task_id")
-                if target_task_id in agent_intent_targets:
-                    fail(f"task {target_task_id} has more than one agent launch intent")
-                agent_intent_targets.add(target_task_id)
+                intent_attempt = intent.get("attempt", 1)
+                intent_key = (target_task_id, intent_attempt)
+                if (
+                    isinstance(intent_attempt, bool)
+                    or not isinstance(intent_attempt, int)
+                    or intent_attempt < 1
+                    or intent_attempt > tasks[target_task_id]["attempts"]
+                    or intent_key in agent_intent_targets
+                ):
+                    fail(f"task {target_task_id} has an invalid duplicate agent attempt intent")
+                agent_intent_targets.add(intent_key)
             intent_ids.add(intent_id)
         resources = task.get("runtime_resources")
         if not isinstance(resources, list):
@@ -2406,8 +2800,8 @@ def apply_event(
             tasks[dependency]["status"] != "done" for dependency in task["dependencies"]
         ):
             fail("cannot reserve a task slot before its dependencies finish")
-        if task["attempts"] != 0:
-            fail("task launch attempts cannot be retried")
+        if task["attempts"] > limits["max_retries_per_task"]:
+            fail("task has exhausted its catalog fallback attempts")
         if task["runtime"].get("productive_prompt"):
             fail("productive work already reached this task")
         task["attempts"] += 1
@@ -2595,6 +2989,26 @@ def apply_event(
             }
         )
 
+    elif event_type == "record-usable-contribution":
+        target = event.get("task_id")
+        root_recovery = actor == root_id and state["run"].get("reconciliation_required")
+        if (
+            not isinstance(target, str)
+            or target not in tasks
+            or (tasks[target].get("parent_id") != actor and not root_recovery)
+        ):
+            fail("only the direct parent or recorded root recovery may record contribution")
+        runtime = tasks[target]["runtime"]
+        if runtime.get("status") not in {"working", "blocked", "settled", "stopped"}:
+            fail("usable contribution requires a started runtime")
+        if runtime.get("usable_contribution"):
+            fail("usable contribution evidence is write-once")
+        if not nonempty(event.get("evidence")):
+            fail("usable contribution requires evidence")
+        runtime["usable_contribution"] = True
+        runtime["contribution_evidence"] = event["evidence"]
+        runtime["contributed_at"] = now()
+
     elif event_type == "release-slot":
         target = event.get("task_id")
         root_recovery = actor == root_id and state["run"].get("reconciliation_required")
@@ -2627,12 +3041,24 @@ def apply_event(
         task = tasks[target]
         if (
             task["status"] not in {"launching", "blocked"}
-            or task["runtime"].get("productive_prompt")
             or task["runtime"].get("status") not in {"stopped", "settled"}
         ):
-            fail("failed launch requires confirmed stopped, unproductive runtime state")
-        if any(item.get("status") == "live" for item in task["runtime_resources"]):
-            fail("settle failed-launch resources first")
+            fail("failed attempt requires confirmed stopped runtime state")
+        target_intent_ids = {
+            intent.get("id")
+            for owner in tasks.values()
+            for intent in owner.get("runtime_intents", [])
+            if intent.get("target_task_id") == target
+            and intent.get("attempt", 1) == task.get("attempts")
+        }
+        linked_resources = [
+            resource
+            for owner in tasks.values()
+            for resource in owner.get("runtime_resources", [])
+            if resource.get("intent_id") in target_intent_ids
+        ]
+        if linked_resources and any(resource.get("status") != "closed" for resource in linked_resources):
+            fail("close every failed-attempt runtime resource before releasing its slot")
         if target in state["run"]["active_agent_slots"]:
             state["run"]["active_agent_slots"].remove(target)
         task["status"] = "blocked"
@@ -2641,6 +3067,94 @@ def apply_event(
         task["result"]["blockers"] = [
             event.get("reason") or "Agent launch failed before productive work."
         ]
+
+    elif event_type == "prepare-fallback":
+        target = event.get("task_id")
+        root_recovery = actor == root_id and state["run"].get("reconciliation_required")
+        if (
+            not isinstance(target, str)
+            or target not in tasks
+            or (tasks[target].get("parent_id") != actor and not root_recovery)
+        ):
+            fail("only the direct parent or recorded root recovery may prepare fallback")
+        task = tasks[target]
+        if (
+            task["status"] != "blocked"
+            or task["attempts"] < 1
+            or task["attempts"] > limits["max_retries_per_task"]
+            or task["runtime"].get("status") not in {"stopped", "settled"}
+            or task["runtime"].get("usable_contribution", False)
+        ):
+            fail("fallback requires a stopped blocked task with remaining attempts")
+        result_state = task.get("result") or {}
+        if (
+            result_state.get("summary") is not None
+            or result_state.get("files_changed")
+            or result_state.get("checks")
+            or result_state.get("evidence")
+        ):
+            fail("fallback cannot replace a task that recorded a usable contribution")
+        target_intent_ids = {
+            intent.get("id")
+            for owner in tasks.values()
+            for intent in owner.get("runtime_intents", [])
+            if intent.get("target_task_id") == target
+            and intent.get("attempt", 1) == task.get("attempts")
+        }
+        if any(
+            resource.get("status") != "closed"
+            and resource.get("intent_id") in target_intent_ids
+            for owner in tasks.values()
+            for resource in owner.get("runtime_resources", [])
+        ):
+            fail("fallback requires every runtime resource for the failed attempt to be closed")
+        selection = validate_model_selection(
+            event.get("selection"), task["task_class"], require_thinking=catalog_bound
+        )
+        resolution = validate_resolution_artifact(
+            state, event.get("resolution_artifact"), selection
+        )
+        failure_ref, cleanup_ref = validate_fallback_evidence(
+            state, task, resolution
+        )
+        task["runtime_history"].append(
+            {
+                "attempt": task["attempts"],
+                "model_selection": copy.deepcopy(task["model_selection"]),
+                "model_resolution": copy.deepcopy(task["model_resolution"]),
+                "runtime": copy.deepcopy(task["runtime"]),
+                "failure_evidence": failure_ref,
+                "cleanup_evidence": cleanup_ref,
+            }
+        )
+        task["model_selection"] = selection
+        task["model_resolution"] = resolution
+        task["active_resolution"] = copy.deepcopy(resolution)
+        task["active_model"] = {
+            "provider": selection["provider"],
+            "model_id": selection["model_id"],
+            "thinking_level": selection_thinking_level(selection),
+            "source": "fallback",
+        }
+        if target in state["run"]["active_agent_slots"]:
+            fail("failed task still owns an active agent slot")
+        if len(state["run"]["active_agent_slots"]) >= limits["max_active_agents"]:
+            fail("no root-wide agent slot is available for fallback")
+        task["attempts"] += 1
+        task["runtime"] = {
+            "agent_id": None,
+            "agent_instance_id": None,
+            "pane_id": None,
+            "productive_prompt": False,
+            "usable_contribution": False,
+            "status": "reserved",
+            "reserved_by": actor,
+            "reserved_at": now(),
+        }
+        task["status"] = "launching"
+        task["phase"] = TASK_PHASES["launching"]
+        task["result"]["blockers"] = []
+        state["run"]["active_agent_slots"].append(target)
 
     elif event_type == "add-runtime-intent":
         intent = event.get("intent")
@@ -2682,13 +3196,16 @@ def apply_event(
             for item in existing_intents
         ):
             fail("runtime intent output_path must be unique")
+        attempt = tasks[target_task_id]["attempts"]
         if intent["kind"] == "agent" and any(
-            item.get("kind") == "agent" and item.get("target_task_id") == target_task_id
+            item.get("kind") == "agent"
+            and item.get("target_task_id") == target_task_id
+            and item.get("attempt") == attempt
             for item in existing_intents
         ):
-            fail("each task may have exactly one agent launch intent")
+            fail("each task attempt may have exactly one agent launch intent")
         tasks[actor]["runtime_intents"].append(
-            {**intent, "status": "planned", "created_at": now()}
+            {**intent, "attempt": attempt, "status": "planned", "created_at": now()}
         )
 
     elif event_type == "bind-runtime-intent":
@@ -2815,6 +3332,8 @@ def apply_event(
         )
         if resource is None:
             fail("unknown run-owned runtime resource")
+        if resource.get("status") != "live":
+            fail("settled runtime resources are immutable")
         status = event.get("status", "closed")
         reason = event.get("reason")
         if status not in {"closed", "preserved"}:
@@ -2835,6 +3354,18 @@ def apply_event(
                 or file_digest(candidate) != closure_digest
             ):
                 fail("closed resources require a verified closure response artifact")
+            try:
+                closure_response = json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as error:
+                fail(f"resource closure response is invalid JSON: {error}")
+            expected_close = (
+                "cli:tab:close" if resource.get("kind") == "tab" else "cli:pane:close"
+            )
+            if (
+                closure_response.get("id") != expected_close
+                or (closure_response.get("result") or {}).get("type") != "ok"
+            ):
+                fail("resource closure artifact is not a successful matching Herdr close")
             closure_artifact = normalized
         resource.update(
             {
@@ -2871,6 +3402,11 @@ def apply_event(
                 value["files_changed"], "result.files_changed"
             )
         tasks[actor]["result"].update(value)
+        if any(
+            value.get(key)
+            for key in ("summary", "files_changed", "checks", "evidence")
+        ):
+            tasks[actor]["runtime"]["usable_contribution"] = True
 
     elif event_type == "accept-task":
         target = event.get("task_id")
@@ -2890,6 +3426,7 @@ def apply_event(
         if (
             runtime_status != "settled"
             or not task["runtime"].get("productive_prompt")
+            or not task["runtime"].get("usable_contribution", False)
             or not nonempty(task["runtime"].get("agent_instance_id"))
             or not nonempty(task["runtime"].get("launch_intent_id"))
             or not nonempty(task["runtime"].get("launched_provider"))

@@ -69,9 +69,9 @@ Todos are maintained throughout the task, never reconstructed at the end.
 
 1. `allow_subagents` must be true on the parent.
 2. Delegation uses independent outcomes, not folders. New files and folders are allowed.
-3. A parent may create at most six immediate children. Immutable hard ceilings also cover depth, total tasks, active agents, and one launch attempt per task.
+3. A parent may create at most six immediate children. Immutable hard ceilings also cover depth, total tasks, active agents, and 32 candidate attempts per task. Safe automatic-model fallback advances the same task through an append-only attempt ledger while every runtime remains fresh.
 4. Descendant contracts are parent-owned. Children cannot rewrite or widen them.
-5. The parent follows the global `model-routing-policy`, chooses a task class, binds the Pi-global versioned model catalog by digest, verifies availability, and records the selected provider/model/thinking settings before launch. Any resolution or launch failure blocks the task after owned resources are cleaned up.
+5. The parent follows the global `model-routing-policy`, chooses a task class, binds the Pi-global versioned model catalog by digest, verifies availability, and records the selected provider/model/thinking settings before launch. A confirmed model-specific automatic-routing failure with no usable contribution is stopped and cleaned up, then `prepare-fallback` atomically verifies its chained evidence and reserves the next fresh attempt on the same task. User pins, ambiguous failures, partial work, setup failures, and provenance failures block.
 6. Adding a ready child and reserving its slot is one atomic event. Dependency-blocked children are queued without a slot.
 7. If no slot is available, do not wait indefinitely while holding a parent slot. Keep work in the current task, reduce decomposition, or settle existing children first.
 8. The child receives the global `implement` skill, feature name, state location, task ID, raw task capability, and logical contract. Its first mutation creates todos.
@@ -102,10 +102,10 @@ A child may create a separate tab for descendants, but never controls or closes 
 
 ## Partial launch and prompt recovery
 
-- If no child receives productive work, close recorded resources, confirm the runtime stopped, release slots, and block the failed tasks.
-- If some children receive productive work, never reset productive state or duplicate them. Monitor accepted children and block the failed tasks after cleanup.
-- `unknown`, missing output, and approval prompts are not completion.
-- Never start another runtime after a failed launch.
+- If no child contributes usable work, close recorded resources and confirm each runtime stopped. Advance only confirmed no-contribution automatic-model failures through `prepare-fallback`; block failures that do not qualify.
+- If some children contribute, never reset or duplicate them. Monitor those children and retry only qualifying failed roles after cleanup.
+- `unknown`, missing output after possible work, and approval prompts are neither completion nor safe fallback evidence.
+- Never reuse a failed pane, session, intent, or model. A fallback preserves the logical task contract but creates a fresh runtime after exact cleanup.
 
 ## Dependencies and collisions
 

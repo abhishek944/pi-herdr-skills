@@ -182,6 +182,36 @@ PY
 done < <(find skills scripts -type f -print0)
 
 PYTHONDONTWRITEBYTECODE=1 python3 skills/model-routing-policy/scripts/test-user-pinning.py >/dev/null
+PYTHONDONTWRITEBYTECODE=1 python3 skills/implement/scripts/test-fallback-state.py >/dev/null 2>&1
+
+python3 - <<'PY'
+from pathlib import Path
+
+router = Path("skills/model-routing-policy/scripts/model-routing.py").read_text()
+policy = Path("skills/model-routing-policy/SKILL.md").read_text()
+herdr = Path("skills/herdr/SKILL.md").read_text()
+assert '"--fallback-from"' in router, "router must bind fallback to a prior resolution"
+assert '"fallbackFrom": fallback_record' in router, "resolution must preserve fallback provenance"
+assert "callers cannot submit an arbitrary exclusion list" in policy, "fallback exclusions must be derived from the verified chain"
+assert "user-pinned routing cannot fall back" in router, "user pins must remain fail-closed"
+assert "## Automatic fallback routing" in policy, "routing policy must define bounded fallback"
+assert "same routing zone" in policy, "fallback must preserve the routing zone"
+assert "fresh named pane and fresh Pi session" in policy, "fallback must use a fresh runtime"
+assert "Never start the replacement in a pane that may still contain the failed process" in herdr, "Herdr replacement must isolate failed processes"
+state_store = Path("skills/implement/scripts/state-store.py").read_text()
+assert 'event_type == "prepare-fallback"' in state_store, "implementation state must own fallback transitions"
+assert '"max_retries_per_task": 31' in state_store, "fallback attempts need a separate bounded ledger"
+for relative in [
+    "skills/agent-review/SKILL.md",
+    "skills/design-council/SKILL.md",
+    "skills/discuss/SKILL.md",
+    "skills/grill-me/SKILL.md",
+    "skills/implement/SKILL.md",
+    "skills/ui-ux-grill-me/SKILL.md",
+]:
+    text = Path(relative).read_text()
+    assert "no-contribution" in text, f"{relative} must distinguish safe fallback from partial work"
+PY
 PYTHONDONTWRITEBYTECODE=1 python3 skills/agent-review/scripts/test-contract-preflight.py >/dev/null
 
 python3 - <<'PY'

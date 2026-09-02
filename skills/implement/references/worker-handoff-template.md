@@ -39,7 +39,7 @@ You may not rewrite or widen your contract. If it is insufficient or a new depen
 - If `allow_subagents` is false, work directly and do not control an agent runtime.
 - If true, delegation remains optional. Create children only for genuinely independent outcomes that materially benefit from separate context or parallel work.
 - Every child loads `implement` and receives its own task ID, raw capability, logical contract, bound model, and narrowed delegation permission.
-- Follow the globally installed `model-routing-policy`. Capture the caller, select provider/model/thinking only from the bound Pi-global versioned catalog, preserve the resolver artifact and pre-launch digest, and record the digest-bound launch verification before any productive prompt. Review children also preserve caller/contributor baselines and the non-regressive escalation result.
+- Follow the globally installed `model-routing-policy`. Capture the caller, select provider/model/thinking only from the bound Pi-global versioned catalog, preserve the resolver artifact and pre-launch digest, and record the digest-bound launch verification before any productive prompt. Review children also preserve caller/contributor baselines and the non-regressive escalation result. A child never starts its own fallback; after a confirmed no-contribution automatic-model failure, its parent may advance the same task through the state helper's evidence-bound `prepare-fallback` event.
 - Atomically reserve a root-wide slot before launch. Never exceed immediate or root-wide limits.
 - Pass only the child's capability into its environment. Never pass your capability or the root lease.
 - Do not launch final reviewers. Final integration and review belong to the root.

@@ -14,12 +14,14 @@
         ],
         "taskClasses": [
           "architecture",
+          "exploration",
           "implementation",
           "integration",
           "review"
         ],
         "taskClassScores": {
           "architecture": 5,
+          "exploration": 5,
           "implementation": 5,
           "integration": 5,
           "review": 5

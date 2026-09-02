@@ -76,7 +76,7 @@ A child receives only its own task capability. It does not receive the root leas
       "max_children_per_task": 6,
       "max_total_tasks": 18,
       "max_active_agents": 6,
-      "max_retries_per_task": 0
+      "max_retries_per_task": 31
     },
     "active_agent_slots": ["task-0002"],
     "model_catalog": {
@@ -194,7 +194,7 @@ Statuses are `pending`, `working`, `done`, `blocked`, or `cancelled`. A done tod
 - ready dependencies are done;
 - an active slot is reserved atomically for immediate launch, or the child is explicitly queued.
 
-Hard ceilings are depth 2, six immediate children, eighteen total tasks, six active descendant agents, and one launch attempt per task. Editing the JSON cannot raise them. Maximum-depth and review tasks are always leaves.
+Hard ceilings are depth 2, six immediate children, eighteen total tasks, six active descendant agents, and 32 candidate attempts per task. Editing the JSON cannot raise them. Maximum-depth and review tasks are always leaves. A confirmed no-contribution automatic-model failure advances the same immutable task through the atomic `prepare-fallback` event; the event appends the stopped attempt to `runtime_history`, validates cumulative routing and cleanup evidence, and reserves a fresh runtime slot without consuming a logical-child slot.
 
 `add-child` returns the child task ID and raw child capability. Pass the raw capability to that child, then discard it from coordinator artifacts. If an inactive, unproductive child's capability is lost during recovery, its parent or the root may rotate it; the old hash remains in audit history.
 
@@ -232,7 +232,7 @@ A model selection records:
 }
 ```
 
-Every model selection is bound to the preserved resolver artifact and its pre-launch digest. The selected model and recorded caller must exist in the bound catalog and declare their thinking levels. The selected model must support the recorded `input_types` and task class. Review selections record the current caller and every contributor in `reviewer_escalation.baselines` and must select a strictly stronger reviewer. The original selection is frozen at the first slot reservation. A task gets one launch attempt. Any resolution or launch failure blocks the task after owned resources are cleaned up. Before a runtime becomes working or receives a productive prompt, a digest-bound verifier artifact must match the active resolution, bound start response, catalog digest, and immutable session identity. Productive-prompt state can move only from false to true.
+Every model selection is bound to the preserved resolver artifact and its pre-launch digest. The selected model and recorded caller must exist in the bound catalog and declare their thinking levels. The selected model must support the recorded `input_types` and task class. Review selections record the current caller and every contributor in `reviewer_escalation.baselines` and must select a strictly stronger reviewer. A selection is immutable within one attempt. A model-specific failure with no usable contribution may advance only through `prepare-fallback`, which requires the new resolution to bind the active prior resolution, verified launch, complete runtime output, exact closed-resource response, unchanged routing zone, and exactly the prior selected model added to cumulative exclusions. Prompt dispatch is recorded separately from usable contribution: an immediate provider failure may occur after dispatch, but any recorded tool/file/result contribution, side effect, ambiguous output, or unclosed/preserved resource forbids fallback. Every other resolution or launch failure blocks after cleanup. Before a runtime becomes working or receives a prompt, a digest-bound verifier artifact must match the active resolution, bound start response, catalog digest, and immutable session identity. Attempt history preserves every earlier selection, resolution, session, failure, output, and cleanup artifact.
 
 ## Atomic updates
 

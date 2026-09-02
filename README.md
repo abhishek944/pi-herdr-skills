@@ -127,7 +127,7 @@ The implementation and review workflows require Herdr-hosted Pi agents.
    herdr integration status
    ```
 
-The `implement`, `agent-review`, and `design-council` workflows intentionally stop instead of silently falling back when Herdr, a suitable Pi model, or launch verification is unavailable. Read the [Herdr agent guide](https://herdr.dev/agent-guide.md) for concepts and controls.
+The agent workflows never silently weaken their requirements. When automatic routing hits a model-specific quota or availability failure before any useful work, they try another eligible catalog model with the same task, quality, input, thinking, and review requirements. Explicit user model choices, Herdr setup failures, uncertain partial work, exhausted candidates, and launch-verification failures still stop safely. Read the [Herdr agent guide](https://herdr.dev/agent-guide.md) for concepts and controls.
 
 ## Extensions in the source setup
 

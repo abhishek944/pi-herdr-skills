@@ -73,7 +73,7 @@ Each task has:
 
 Do not invent children merely to create parallelism. Keep cohesive work in the current task. Delegate when a separate context, specialist model, or parallel independent outcome materially improves quality or speed.
 
-A parent may have at most six immediate children. Root-wide defaults also limit depth to two levels below the root, total tasks to eighteen, active descendant agents to six, and launch attempts to one per task. The state helper enforces these limits atomically.
+A parent may have at most six immediate children. Root-wide defaults also limit depth to two levels below the root, total tasks to eighteen, active descendant agents to six, and automatic fallback to 32 candidate attempts per task. The same logical task keeps an append-only attempt ledger, but every attempt uses a fresh intent, pane, Pi session, model resolution, and launch verification. The state helper enforces these limits atomically.
 
 Sibling outcomes should almost always be independent. If a hidden dependency or overlapping behavior appears, record it and let the parent serialize, integrate, or replan the work. Never coordinate silently through concurrent edits.
 
@@ -123,11 +123,11 @@ Use the shared resolver's structured capability and thinking metadata. Do not im
 - live Pi availability evidence;
 - reviewer baselines, comparison rule, and verified stronger escalation.
 
-Store the resolver's emitted `stateSelection` object without hand-converting fields, and bind it to the resolver artifact path and pre-launch digest. Every Pi launch passes provider, model, and thinking level explicitly. Save the complete runtime start response, record `launched_thinking_level`, and verify all three settings through the shared policy before prompting. If resolution or launch fails, clean up owned resources and stop with a blocker. Do not retry or select another model or runtime.
+Store the resolver's emitted `stateSelection` object without hand-converting fields, and bind it to the resolver artifact path and pre-launch digest. Every Pi launch passes provider, model, and thinking level explicitly. Save the complete runtime start response, record `launched_thinking_level`, and verify all three settings through the shared policy before prompting. An automatic candidate that has a confirmed model-specific failure before producing any usable contribution may advance the same immutable task through `prepare-fallback` only after exact resource cleanup. That atomic event validates the chained resolution, unchanged routing zone, prior selected model, failure and cleanup evidence, empty task result, and remaining attempt budget before reserving the replacement slot. User-pinned, ambiguous, post-contribution, provenance, and Herdr setup failures block without fallback.
 
 ## Runtime selection
 
-The policy applies independently at every task allowed to delegate. Herdr is the only runtime. It requires `HERDR_ENV=1`, the `herdr` command, and verified Pi-agent support. If any requirement is unavailable or a launch fails, clean up owned resources and stop with a blocker.
+The policy applies independently at every task allowed to delegate. Herdr is the only runtime. It requires `HERDR_ENV=1`, the `herdr` command, and verified Pi-agent support. Missing Herdr requirements block after cleanup. A confirmed no-contribution automatic-model failure follows the attempt-ledger fallback above; other launch failures block.
 
 Every delegated coding agent must run through Pi in Herdr with the mandatory `--kind pi`; never launch or substitute another agent kind or runtime.
 
@@ -153,7 +153,7 @@ For every immediate child wave, the delegating task:
 
 A child may create a separate tab for its descendants, but it must never control or close the tab containing itself. The resource creator owns cleanup. The root may reclaim descendant resources only during cancellation or recovery and only from exact recorded IDs.
 
-If only part of a launch or prompt batch succeeds, never duplicate accepted work. Monitor productive children and block the failed roles after cleanup. `unknown`, missing output, and approval prompts are not completion.
+If only part of a launch or prompt batch succeeds, never duplicate accepted work. Monitor productive children. Replace only roles with confirmed no-contribution automatic-model failures, keeping their contracts unchanged and exclusions cumulative; block the other failed roles after cleanup. `unknown`, missing output after possible work, and approval prompts are not safe fallback evidence or completion.
 
 Cancellation is two-phase. First request deepest-first cancellation while slots remain occupied. Confirm each runtime stopped, collect partial output, and close or preserve exact resources. Only then finalize cancellation and release slots. A cancellation request is never treated as settled work.
 

@@ -46,6 +46,32 @@ def valid_digest(value: Any) -> bool:
     return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
 
 
+def read_bound_bytes(path_value: str, digest: str, label: str) -> tuple[Path, bytes]:
+    path = Path(path_value).expanduser().resolve()
+    if not valid_digest(digest):
+        fail(f"{label} requires a SHA-256 digest")
+    try:
+        if path.is_symlink() or not path.is_file():
+            fail(f"{label} must be a regular non-symlink file")
+        content = path.read_bytes()
+        if not content or hashlib.sha256(content).hexdigest() != digest:
+            fail(f"{label} is empty or its digest does not match")
+    except OSError as error:
+        fail(f"could not read {label}: {error}")
+    return path, content
+
+
+def read_bound_json(path_value: str, digest: str, label: str) -> tuple[Path, dict[str, Any]]:
+    path, content = read_bound_bytes(path_value, digest, label)
+    try:
+        value = json.loads(content, object_pairs_hook=strict_object)
+    except json.JSONDecodeError as error:
+        fail(f"could not read {label}: {error}")
+    if not isinstance(value, dict):
+        fail(f"{label} must contain a JSON object")
+    return path, value
+
+
 def strict_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     value: dict[str, Any] = {}
     for key, item in pairs:
@@ -241,7 +267,14 @@ def load_catalog(path: Path) -> dict[str, Any]:
     }
 
 
-def available_models() -> tuple[set[tuple[str, str]], str]:
+def available_models(
+    replay: list[str] | None = None,
+) -> tuple[set[tuple[str, str]], str]:
+    if replay is not None:
+        available = {parse_ref(value) for value in replay}
+        if not available or len(available) != len(replay):
+            fail("preserved availability snapshot is empty or duplicated")
+        return available, "pi --list-models returned the selected provider/model"
     try:
         output = subprocess.check_output(
             ["pi", "--list-models"], text=True, stderr=subprocess.STDOUT
@@ -265,6 +298,188 @@ def parse_ref(value: str) -> tuple[str, str]:
     if not provider or not model_id:
         fail(f"model reference must be provider/model: {value}")
     return provider, model_id
+
+
+def validate_preserved_fallback_chain(
+    resolution: dict[str, Any], catalog_digest: str, seen: set[str] | None = None
+) -> None:
+    seen = set() if seen is None else seen
+    request = resolution.get("request") or {}
+    excluded = request.get("excludedModels")
+    fallback = request.get("fallbackFrom")
+    if (
+        resolution.get("policyVersion") != 5
+        or resolution.get("launchAllowed") is not True
+        or (resolution.get("catalog") or {}).get("digest") != catalog_digest
+        or request.get("selectionMode") != "automatic"
+        or not isinstance(excluded, list)
+        or len(excluded) != len(set(excluded))
+    ):
+        fail("previous fallback chain has invalid routing provenance")
+    selected_now = resolution.get("selection") or {}
+    selected_now_ref = f"{selected_now.get('provider')}/{selected_now.get('modelId')}"
+    availability_models = (resolution.get("availability") or {}).get("models")
+    if (
+        not isinstance(availability_models, list)
+        or selected_now_ref not in availability_models
+        or resolution.get("piArgs")
+        != [
+            "--provider",
+            selected_now.get("provider"),
+            "--model",
+            selected_now.get("modelId"),
+            "--thinking",
+            selected_now.get("thinkingLevel"),
+        ]
+    ):
+        fail("previous fallback chain has invalid selection or availability provenance")
+    if fallback is None:
+        if excluded:
+            fail("initial fallback-chain resolution must not exclude models")
+        return
+    if not isinstance(fallback, dict) or set(fallback) != {
+        "previousResolution",
+        "failureEvidence",
+        "cleanupEvidence",
+    }:
+        fail("previous fallback chain is incomplete")
+    previous_ref = fallback["previousResolution"]
+    if not isinstance(previous_ref, dict) or set(previous_ref) != {"path", "digest"}:
+        fail("previous fallback chain has an invalid resolution reference")
+    if previous_ref["digest"] in seen:
+        fail("previous fallback chain contains a cycle")
+    seen.add(previous_ref["digest"])
+    _, previous = read_bound_json(
+        previous_ref.get("path"), previous_ref.get("digest"), "chained previous resolution"
+    )
+    validate_preserved_fallback_chain(previous, catalog_digest, seen)
+    previous_request = previous.get("request") or {}
+    zone_keys = {
+        "taskClass",
+        "inputTypes",
+        "minimumQualityRank",
+        "thinking",
+        "noContributor",
+        "strongerThan",
+        "strongerThanThinking",
+        "selectionMode",
+        "userModel",
+        "userModelAuthority",
+    }
+    if (
+        any(request.get(key) != previous_request.get(key) for key in zone_keys)
+        or resolution.get("caller") != previous.get("caller")
+    ):
+        fail("previous fallback chain changes its routing zone or caller baseline")
+    selected = previous.get("selection") or {}
+    expected = list(previous_request.get("excludedModels") or []) + [
+        f"{selected.get('provider')}/{selected.get('modelId')}"
+    ]
+    if excluded != expected:
+        fail("previous fallback chain contains an unproven exclusion")
+    failure_ref = fallback["failureEvidence"]
+    cleanup_ref = fallback["cleanupEvidence"]
+    for artifact, label in (
+        (failure_ref, "chained failure evidence"),
+        (cleanup_ref, "chained cleanup evidence"),
+    ):
+        if not isinstance(artifact, dict) or set(artifact) != {"path", "digest"}:
+            fail(f"{label} reference is invalid")
+    _, failure = read_bound_json(
+        failure_ref.get("path"), failure_ref.get("digest"), "chained failure evidence"
+    )
+    _, cleanup = read_bound_json(
+        cleanup_ref.get("path"), cleanup_ref.get("digest"), "chained cleanup evidence"
+    )
+    failed_model = f"{selected.get('provider')}/{selected.get('modelId')}"
+    if (
+        set(failure) != {
+            "classification",
+            "reasonCode",
+            "failedModel",
+            "agentSessionId",
+            "paneId",
+            "usableContribution",
+            "sideEffects",
+            "launchVerification",
+            "runtimeOutput",
+        }
+        or failure.get("classification") != "model-specific-no-contribution"
+        or failure.get("reasonCode") not in {
+            "quota",
+            "capacity",
+            "rate-limit",
+            "authentication",
+            "availability",
+        }
+        or failure.get("failedModel") != failed_model
+        or failure.get("usableContribution") is not False
+        or failure.get("sideEffects") is not False
+        or not nonempty(failure.get("agentSessionId"))
+        or not nonempty(failure.get("paneId"))
+    ):
+        fail("historical fallback failure evidence is invalid")
+    launch_ref = failure.get("launchVerification") or {}
+    output_ref = failure.get("runtimeOutput") or {}
+    _, launch = read_bound_json(
+        launch_ref.get("path"), launch_ref.get("digest"), "historical launch verification"
+    )
+    read_bound_bytes(
+        output_ref.get("path"), output_ref.get("digest"), "historical runtime output"
+    )
+    start_ref = (launch.get("evidence") or {}).get("startResponseArtifact") or {}
+    verified_launch = verify_command(
+        argparse.Namespace(
+            resolution=previous_ref.get("path"),
+            resolution_digest=previous_ref.get("digest"),
+            herdr_start=start_ref.get("path"),
+            runtime_env=None,
+            output=None,
+            _capture=True,
+        )
+    )
+    if (
+        launch != verified_launch
+        or (launch.get("evidence") or {}).get("sessionIdentity")
+        != failure.get("agentSessionId")
+        or (launch.get("evidence") or {}).get("paneIdentity")
+        != failure.get("paneId")
+    ):
+        fail("historical fallback launch binding is invalid")
+    if (
+        set(cleanup) != {
+            "agentSessionId",
+            "paneId",
+            "agentStopped",
+            "paneClosed",
+            "remainingActive",
+            "closureResponse",
+            "absenceResponse",
+        }
+        or cleanup.get("agentSessionId") != failure.get("agentSessionId")
+        or cleanup.get("paneId") != failure.get("paneId")
+        or cleanup.get("agentStopped") is not True
+        or cleanup.get("paneClosed") is not True
+        or cleanup.get("remainingActive") is not False
+    ):
+        fail("historical fallback cleanup evidence is invalid")
+    closure_ref = cleanup.get("closureResponse") or {}
+    absence_ref = cleanup.get("absenceResponse") or {}
+    _, closure = read_bound_json(
+        closure_ref.get("path"), closure_ref.get("digest"), "historical closure response"
+    )
+    _, absence = read_bound_json(
+        absence_ref.get("path"), absence_ref.get("digest"), "historical pane absence response"
+    )
+    if (
+        closure.get("id") not in {"cli:pane:close", "cli:tab:close"}
+        or (closure.get("result") or {}).get("type") != "ok"
+        or absence.get("id") != "cli:pane:get"
+        or (absence.get("error") or {}).get("code") != "pane_not_found"
+        or (absence.get("error") or {}).get("message")
+        != f"pane {failure.get('paneId')} not found"
+    ):
+        fail("historical fallback closure or absence proof is invalid")
 
 
 def normalize_thinking(level: str | None, label: str) -> str:
@@ -363,15 +578,204 @@ def validate_command(args: argparse.Namespace) -> None:
     )
 
 
-def resolve_command(args: argparse.Namespace) -> None:
+def resolve_command(args: argparse.Namespace) -> dict[str, Any]:
     catalog_path = trusted_catalog_path(Path(args.catalog))
     catalog = load_catalog(catalog_path)
     required_inputs = set(args.input or ["text"])
-    available, availability_evidence = available_models()
+    available, availability_evidence = available_models(
+        getattr(args, "_availability_override", None)
+    )
     by_ref = {(item["provider"], item["modelId"]): item for item in catalog["models"]}
     caller = current_caller(by_ref)
 
     user_pin = parse_ref(args.user_model) if args.user_model else None
+    fallback_values = [
+        args.fallback_from,
+        args.fallback_from_digest,
+        args.failure_evidence,
+        args.failure_evidence_digest,
+        args.cleanup_evidence,
+        args.cleanup_evidence_digest,
+    ]
+    has_fallback = any(value is not None for value in fallback_values)
+    if has_fallback and not all(value is not None for value in fallback_values):
+        fail("fallback routing requires prior resolution, failure, cleanup, and all digests")
+    if user_pin and has_fallback:
+        fail("user-pinned routing cannot fall back to another model", 5)
+    excluded_refs: list[tuple[str, str]] = []
+    fallback_record: dict[str, Any] | None = None
+    if has_fallback:
+        previous_path, previous = read_bound_json(
+            args.fallback_from, args.fallback_from_digest, "previous resolution"
+        )
+        validate_preserved_fallback_chain(previous, catalog["digest"])
+        previous_request = previous.get("request") or {}
+        expected_request = {
+            "taskClass": args.task_class,
+            "inputTypes": sorted(required_inputs),
+            "minimumQualityRank": args.minimum_quality_rank,
+            "thinking": args.thinking,
+            "noContributor": args.no_contributor,
+            "strongerThan": args.stronger_than,
+            "strongerThanThinking": args.stronger_than_thinking,
+            "selectionMode": "automatic",
+            "userModel": None,
+            "userModelAuthority": None,
+        }
+        if any(previous_request.get(key) != value for key, value in expected_request.items()):
+            fail("fallback routing zone does not match the previous resolution")
+        if previous.get("caller") != caller:
+            fail("fallback caller baseline does not match the previous resolution")
+        previous_excluded = previous_request.get("excludedModels")
+        if not isinstance(previous_excluded, list) or len(previous_excluded) != len(set(previous_excluded)):
+            fail("previous resolution has invalid fallback exclusions")
+        excluded_refs = [parse_ref(value) for value in previous_excluded]
+        previous_selected = previous.get("selection") or {}
+        selected_ref = (
+            previous_selected.get("provider"),
+            previous_selected.get("modelId"),
+        )
+        if selected_ref not in by_ref or selected_ref in excluded_refs:
+            fail("previous resolution has an invalid selected fallback candidate")
+        if (previous.get("catalog") or {}).get("digest") != catalog["digest"]:
+            fail("fallback cannot cross a model catalog change")
+        previous_pi_args = previous.get("piArgs")
+        if previous_pi_args != [
+            "--provider",
+            selected_ref[0],
+            "--model",
+            selected_ref[1],
+            "--thinking",
+            previous_selected.get("thinkingLevel"),
+        ]:
+            fail("previous resolution has non-canonical launch arguments")
+
+        failure_path, failure = read_bound_json(
+            args.failure_evidence, args.failure_evidence_digest, "fallback failure evidence"
+        )
+        required_failure = {
+            "classification",
+            "reasonCode",
+            "failedModel",
+            "agentSessionId",
+            "paneId",
+            "usableContribution",
+            "sideEffects",
+            "launchVerification",
+            "runtimeOutput",
+        }
+        if set(failure) != required_failure or failure.get("classification") != "model-specific-no-contribution":
+            fail("fallback failure evidence has an invalid schema or classification")
+        if failure.get("reasonCode") not in {
+            "quota",
+            "capacity",
+            "rate-limit",
+            "authentication",
+            "availability",
+        }:
+            fail("fallback failure reason is not model-specific and retryable")
+        selected_text = f"{selected_ref[0]}/{selected_ref[1]}"
+        if (
+            failure.get("failedModel") != selected_text
+            or failure.get("usableContribution") is not False
+            or failure.get("sideEffects") is not False
+            or not nonempty(failure.get("agentSessionId"))
+            or not nonempty(failure.get("paneId"))
+        ):
+            fail("fallback failure evidence does not prove a no-contribution failure for the prior selection")
+        launch_artifact = failure.get("launchVerification")
+        output_artifact = failure.get("runtimeOutput")
+        if (
+            not isinstance(launch_artifact, dict)
+            or set(launch_artifact) != {"path", "digest"}
+            or not isinstance(output_artifact, dict)
+            or set(output_artifact) != {"path", "digest"}
+        ):
+            fail("fallback failure evidence must bind launch verification and runtime output")
+        _, launch_verification = read_bound_json(
+            launch_artifact.get("path"), launch_artifact.get("digest"), "prior launch verification"
+        )
+        _, _ = read_bound_bytes(
+            output_artifact.get("path"), output_artifact.get("digest"), "failed runtime output"
+        )
+        launch_evidence = launch_verification.get("evidence") or {}
+        start_ref = launch_evidence.get("startResponseArtifact") or {}
+        verified_launch = verify_command(
+            argparse.Namespace(
+                resolution=str(previous_path),
+                resolution_digest=args.fallback_from_digest,
+                herdr_start=start_ref.get("path"),
+                runtime_env=None,
+                output=None,
+                _capture=True,
+            )
+        )
+        if (
+            launch_verification != verified_launch
+            or launch_evidence.get("sessionIdentity") != failure["agentSessionId"]
+            or launch_evidence.get("paneIdentity") != failure["paneId"]
+        ):
+            fail("fallback failure evidence is not bound to the prior verified launch")
+
+        cleanup_path, cleanup = read_bound_json(
+            args.cleanup_evidence, args.cleanup_evidence_digest, "fallback cleanup evidence"
+        )
+        if set(cleanup) != {
+            "agentSessionId",
+            "paneId",
+            "agentStopped",
+            "paneClosed",
+            "remainingActive",
+            "closureResponse",
+            "absenceResponse",
+        } or (
+            cleanup.get("agentSessionId") != failure["agentSessionId"]
+            or cleanup.get("paneId") != failure["paneId"]
+            or cleanup.get("agentStopped") is not True
+            or cleanup.get("paneClosed") is not True
+            or cleanup.get("remainingActive") is not False
+        ):
+            fail("fallback cleanup evidence does not prove exact runtime cleanup")
+        closure_artifact = cleanup.get("closureResponse")
+        absence_artifact = cleanup.get("absenceResponse")
+        if (
+            not isinstance(closure_artifact, dict)
+            or set(closure_artifact) != {"path", "digest"}
+            or not isinstance(absence_artifact, dict)
+            or set(absence_artifact) != {"path", "digest"}
+        ):
+            fail("fallback cleanup evidence must bind closure and post-close absence responses")
+        _, closure = read_bound_json(
+            closure_artifact.get("path"), closure_artifact.get("digest"), "runtime closure response"
+        )
+        if closure.get("id") not in {"cli:pane:close", "cli:tab:close"} or (closure.get("result") or {}).get("type") != "ok":
+            fail("fallback cleanup evidence does not contain a successful Herdr closure response")
+        _, absence = read_bound_json(
+            absence_artifact.get("path"), absence_artifact.get("digest"), "post-close pane absence response"
+        )
+        if (
+            absence.get("id") != "cli:pane:get"
+            or (absence.get("error") or {}).get("code") != "pane_not_found"
+            or (absence.get("error") or {}).get("message")
+            != f"pane {failure['paneId']} not found"
+        ):
+            fail("fallback cleanup does not prove the exact failed pane is absent")
+        excluded_refs.append(selected_ref)
+        fallback_record = {
+            "previousResolution": {
+                "path": str(previous_path),
+                "digest": args.fallback_from_digest,
+            },
+            "failureEvidence": {
+                "path": str(failure_path),
+                "digest": args.failure_evidence_digest,
+            },
+            "cleanupEvidence": {
+                "path": str(cleanup_path),
+                "digest": args.cleanup_evidence_digest,
+            },
+        }
+    excluded_set = set(excluded_refs)
     if user_pin and args.user_model_authority != "latest-user-request":
         fail("a user-pinned model requires --user-model-authority latest-user-request")
     if not user_pin and args.user_model_authority is not None:
@@ -398,6 +802,7 @@ def resolve_command(args: argparse.Namespace) -> None:
         if args.task_class in model["taskClasses"]
         and required_inputs.issubset(set(model["inputTypes"]))
         and model["qualityRank"] >= args.minimum_quality_rank
+        and (model["provider"], model["modelId"]) not in excluded_set
     ]
     if user_pin:
         pinned = by_ref[user_pin]
@@ -416,7 +821,7 @@ def resolve_command(args: argparse.Namespace) -> None:
         if user_pin:
             fail("user-pinned model is unavailable; no fallback is allowed", 5)
         fail(
-            "no catalog model satisfies task class, inputs, review tier, and live availability",
+            "no remaining catalog model satisfies the routing zone and live availability",
             3,
         )
     if user_pin and args.thinking is not None and args.thinking not in eligible[0]["thinkingLevels"]:
@@ -558,7 +963,7 @@ def resolve_command(args: argparse.Namespace) -> None:
         state_selection["reviewer_escalation"] = state_escalation
 
     result = {
-        "policyVersion": 3,
+        "policyVersion": 5,
         "launchAllowed": True,
         "catalog": {
             "path": str(catalog_path),
@@ -578,6 +983,8 @@ def resolve_command(args: argparse.Namespace) -> None:
             "selectionMode": "user-pinned" if user_pin else "automatic",
             "userModel": args.user_model,
             "userModelAuthority": args.user_model_authority,
+            "excludedModels": [f"{provider}/{model}" for provider, model in excluded_refs],
+            "fallbackFrom": fallback_record,
         },
         "selection": {
             "provider": selected["provider"],
@@ -593,7 +1000,11 @@ def resolve_command(args: argparse.Namespace) -> None:
                 else "Highest structured task-class score, review capability, non-regressive thinking, and catalog order among eligible available models"
             ),
         },
-        "availability": {"verified": True, "evidence": availability_evidence},
+        "availability": {
+            "verified": True,
+            "evidence": availability_evidence,
+            "models": [f"{provider}/{model}" for provider, model in sorted(available)],
+        },
         "reviewerEscalation": escalation,
         "stateSelection": state_selection,
         "piArgs": [
@@ -605,7 +1016,10 @@ def resolve_command(args: argparse.Namespace) -> None:
             thinking,
         ],
     }
+    if getattr(args, "_capture", False):
+        return result
     write_json(result, args.output)
+    return result
 
 
 def value_after(argv: list[str], flag: str) -> str | None:
@@ -627,21 +1041,6 @@ def recompute_resolution(
         or not input_types
     ):
         fail("resolution request is incomplete")
-    command = [
-        sys.executable,
-        str(Path(__file__).resolve()),
-        "resolve",
-        "--catalog",
-        str(catalog_path),
-        "--task-class",
-        task_class,
-        "--minimum-quality-rank",
-        str(request.get("minimumQualityRank")),
-    ]
-    for input_type in input_types:
-        command.extend(["--input", input_type])
-    if request.get("thinking") is not None:
-        command.extend(["--thinking", request["thinking"]])
     selection_mode = request.get("selectionMode")
     user_model = request.get("userModel")
     user_model_authority = request.get("userModelAuthority")
@@ -650,31 +1049,74 @@ def recompute_resolution(
     if selection_mode == "user-pinned":
         if not nonempty(user_model) or user_model_authority != "latest-user-request":
             fail("user-pinned resolution request is incomplete")
-        command.extend(
-            [
-                "--user-model",
-                user_model,
-                "--user-model-authority",
-                user_model_authority,
-            ]
-        )
     elif user_model is not None or user_model_authority is not None:
         fail("automatic resolution cannot contain a user model pin")
-    if request.get("noContributor") is True:
-        command.append("--no-contributor")
-    for contributor in request.get("strongerThan") or []:
-        command.extend(["--stronger-than", contributor])
-    for thinking in request.get("strongerThanThinking") or []:
-        command.extend(["--stronger-than-thinking", thinking])
-    try:
-        return json.loads(
-            subprocess.check_output(command, text=True, stderr=subprocess.STDOUT)
-        )
-    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as error:
-        fail(f"could not recompute routing resolution: {error}")
+    excluded_models = request.get("excludedModels")
+    if (
+        not isinstance(excluded_models, list)
+        or len(excluded_models) != len(set(excluded_models))
+        or any(not nonempty(value) for value in excluded_models)
+    ):
+        fail("resolution request has invalid fallback exclusions")
+    fallback = request.get("fallbackFrom")
+    fallback_values: dict[str, str | None] = {
+        "fallback_from": None,
+        "fallback_from_digest": None,
+        "failure_evidence": None,
+        "failure_evidence_digest": None,
+        "cleanup_evidence": None,
+        "cleanup_evidence_digest": None,
+    }
+    if fallback is None:
+        if excluded_models:
+            fail("an initial resolution cannot contain fallback exclusions")
+    else:
+        if not isinstance(fallback, dict) or set(fallback) != {
+            "previousResolution",
+            "failureEvidence",
+            "cleanupEvidence",
+        }:
+            fail("resolution request has invalid fallback provenance")
+        field_map = {
+            "previousResolution": ("fallback_from", "fallback_from_digest"),
+            "failureEvidence": ("failure_evidence", "failure_evidence_digest"),
+            "cleanupEvidence": ("cleanup_evidence", "cleanup_evidence_digest"),
+        }
+        for key, (path_field, digest_field) in field_map.items():
+            artifact = fallback.get(key)
+            if (
+                not isinstance(artifact, dict)
+                or set(artifact) != {"path", "digest"}
+                or not nonempty(artifact.get("path"))
+                or not valid_digest(artifact.get("digest"))
+            ):
+                fail("resolution request has incomplete fallback provenance")
+            fallback_values[path_field] = artifact["path"]
+            fallback_values[digest_field] = artifact["digest"]
+    availability = resolution.get("availability") or {}
+    snapshot = availability.get("models")
+    if not isinstance(snapshot, list) or not snapshot:
+        fail("resolution lacks its availability snapshot")
+    namespace = argparse.Namespace(
+        catalog=str(catalog_path),
+        task_class=task_class,
+        input=list(input_types),
+        minimum_quality_rank=request.get("minimumQualityRank"),
+        thinking=request.get("thinking"),
+        user_model=user_model,
+        user_model_authority=user_model_authority,
+        stronger_than=list(request.get("strongerThan") or []),
+        stronger_than_thinking=list(request.get("strongerThanThinking") or []),
+        no_contributor=request.get("noContributor") is True,
+        output=None,
+        _availability_override=list(snapshot),
+        _capture=True,
+        **fallback_values,
+    )
+    return resolve_command(namespace)
 
 
-def verify_command(args: argparse.Namespace) -> None:
+def verify_command(args: argparse.Namespace) -> dict[str, Any]:
     resolution_path = Path(args.resolution)
     try:
         resolution_content = resolution_path.read_bytes()
@@ -789,8 +1231,11 @@ def verify_command(args: argparse.Namespace) -> None:
             fail(
                 f"Herdr launch settings do not match resolution: expected {expected}, got {actual}"
             )
+        if not nonempty(agent.get("pane_id")):
+            fail("Herdr start response does not identify the launched pane")
         evidence["herdrArgv"] = actual
         evidence["sessionIdentity"] = session_identity
+        evidence["paneIdentity"] = agent["pane_id"]
         evidence["startResponseArtifact"] = {
             "path": str(start_path),
             "digest": hashlib.sha256(start_content).hexdigest(),
@@ -816,9 +1261,11 @@ def verify_command(args: argparse.Namespace) -> None:
             "path": str(runtime_path),
             "digest": hashlib.sha256(runtime_content).hexdigest(),
         }
-    write_json(
-        {"verified": True, "expected": expected, "evidence": evidence}, args.output
-    )
+    result = {"verified": True, "expected": expected, "evidence": evidence}
+    if getattr(args, "_capture", False):
+        return result
+    write_json(result, args.output)
+    return result
 
 
 def main() -> None:
@@ -843,6 +1290,12 @@ def main() -> None:
     )
     resolve_parser.add_argument("--thinking", choices=THINKING_LEVELS)
     resolve_parser.add_argument("--user-model")
+    resolve_parser.add_argument("--fallback-from")
+    resolve_parser.add_argument("--fallback-from-digest")
+    resolve_parser.add_argument("--failure-evidence")
+    resolve_parser.add_argument("--failure-evidence-digest")
+    resolve_parser.add_argument("--cleanup-evidence")
+    resolve_parser.add_argument("--cleanup-evidence-digest")
     resolve_parser.add_argument(
         "--user-model-authority", choices=("latest-user-request",)
     )
