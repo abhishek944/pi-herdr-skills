@@ -71,7 +71,7 @@ Todos are maintained throughout the task, never reconstructed at the end.
 2. Delegation uses independent outcomes, not folders. New files and folders are allowed.
 3. A parent may create at most six immediate children. Immutable hard ceilings also cover depth, total tasks, active agents, and 32 candidate attempts per task. Safe automatic-model fallback advances the same task through an append-only attempt ledger while every runtime remains fresh.
 4. Descendant contracts are parent-owned. Children cannot rewrite or widen them.
-5. The parent follows the global `model-routing-policy`, chooses a task class, binds the Pi-global versioned model catalog by digest, verifies availability, and records the selected provider/model/thinking settings before launch. A confirmed model-specific automatic-routing failure with no usable contribution is stopped and cleaned up, then `prepare-fallback` atomically verifies its chained evidence and reserves the next fresh attempt on the same task. User pins, ambiguous failures, partial work, setup failures, and provenance failures block.
+5. The parent follows the global `model-routing-policy`, chooses a task class, binds the Pi-global versioned model catalog by digest, verifies availability, and records the selected provider/model/thinking settings before launch. A confirmed model-specific automatic-routing failure with no usable contribution is stopped and cleaned up, then `prepare-fallback` atomically verifies its chained evidence and reserves the next fresh attempt on the same task. A newly created pane still finishing shell initialization first follows the Herdr skill's bounded pre-launch readiness recovery and does not consume an attempt. User pins, ambiguous failures, partial work, setup failures that remain after readiness recovery, and provenance failures block.
 6. Adding a ready child and reserving its slot is one atomic event. Dependency-blocked children are queued without a slot.
 7. If no slot is available, do not wait indefinitely while holding a parent slot. Keep work in the current task, reduce decomposition, or settle existing children first.
 8. The child receives the global `implement` skill, feature name, state location, task ID, raw task capability, and logical contract. Its first mutation creates todos.
@@ -89,14 +89,15 @@ For each wave, the delegating task:
 3. injects only the first child's task capability through tab creation, saves the full Herdr JSON response for the tab intent, copies it to the distinct root-pane artifact, parses the returned IDs, and binds the tab and root pane separately;
 4. assigns the returned root pane to the first child, then creates and binds one split pane for each remaining child only, so the tab has exactly one pane per child and no unused coordinator pane;
 5. injects only the matching child's task capability into each named pane environment and uses `herdr pane rename` to give every pane a distinct responsibility name before agent startup; pane names are mandatory;
-6. starts all agents concurrently through Pi in their named panes using Herdr's mandatory `--kind pi`, passes the recorded provider/model/thinking settings explicitly, and captures immutable agent-session provenance with a bounded deadline;
-7. saves each complete start response, records the actual launched provider/model/thinking settings, and verifies all three against the preserved model-routing resolution before prompting;
-8. after all Pi agents start, launches one `herdr agent prompt ... --wait` process per child concurrently with its complete handoff;
-9. while those processes are still running, observes each agent enter working state and immediately records productive-prompt evidence through the dedicated write-once event;
-10. only after dispatch is durably recorded, joins the concurrent prompt-and-wait processes with deadlines of at least `900000` milliseconds (15 minutes), while preserving the runtime schema's three-hour maximum; overdue work enters timeout cancellation and cannot settle successfully;
-11. stores complete child output and digest, then reconciles it with real changes;
-12. records the observed child runtime as settled, then applies `accept-task` with verification evidence; acceptance marks the child done and releases its slot atomically;
-13. closes or preserves exact recorded resources after outputs and descendant state are durable.
+6. derives each pane's immutable readiness deadline conservatively from its persisted pre-create intent timestamp, records every process snapshot, classification, and optional first `agent_pane_busy` response through the typed `record-pane-readiness` state event, applies the Herdr skill's bounded readiness gate to every newly created pane without restarting the budget after resume, makes the complete batch ready before starting any agent, and allows at most one same-pane start retry when the gate proves shell initialization is still in progress and no agent session exists;
+7. starts all agents concurrently through Pi in their named panes using Herdr's mandatory `--kind pi`, passes the recorded provider/model/thinking settings explicitly, and captures immutable agent-session provenance with a bounded deadline;
+8. saves each complete start response, records the actual launched provider/model/thinking settings, and verifies all three against the preserved model-routing resolution before prompting;
+9. after all Pi agents start, launches one `herdr agent prompt ... --wait` process per child concurrently with its complete handoff;
+10. while those processes are still running, observes each agent enter working state and immediately records productive-prompt evidence through the dedicated write-once event;
+11. only after dispatch is durably recorded, joins the concurrent prompt-and-wait processes with deadlines of at least `900000` milliseconds (15 minutes), while preserving the runtime schema's three-hour maximum; overdue work enters timeout cancellation and cannot settle successfully;
+12. stores complete child output and digest, then reconciles it with real changes;
+13. records the observed child runtime as settled, then applies `accept-task` with verification evidence; acceptance marks the child done and releases its slot atomically;
+14. closes or preserves exact recorded resources after outputs and descendant state are durable.
 
 A child may create a separate tab for descendants, but never controls or closes the tab containing itself. The resource creator owns normal cleanup. The root may settle an exact descendant resource during recovery.
 
@@ -105,7 +106,7 @@ A child may create a separate tab for descendants, but never controls or closes 
 - If no child contributes usable work, close recorded resources and confirm each runtime stopped. Advance only confirmed no-contribution automatic-model failures through `prepare-fallback`; block failures that do not qualify.
 - If some children contribute, never reset or duplicate them. Monitor those children and retry only qualifying failed roles after cleanup.
 - `unknown`, missing output after possible work, and approval prompts are neither completion nor safe fallback evidence.
-- Never reuse a failed pane, session, intent, or model. A fallback preserves the logical task contract but creates a fresh runtime after exact cleanup.
+- Never reuse a failed pane, session, intent, or model. The only exception is one proven pre-launch `agent_pane_busy` shell warm-up before any agent session exists: it is not a failed launch, its intent remains planned and unconsumed, and it may retry once in the same pane within the original readiness deadline after typed evidence is recorded. A repeated busy response blocks. A fallback preserves the logical task contract but creates a fresh runtime after exact cleanup.
 
 ## Dependencies and collisions
 

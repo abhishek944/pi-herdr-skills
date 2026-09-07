@@ -3,6 +3,10 @@ name: herdr
 description: "Control Herdr, a terminal multiplexer that Pi skills use only with Pi coding agents. Use when the user explicitly requests Herdr, or when another globally installed skill explicitly selects Herdr as its subagent runtime. Do not use merely because background work, delegation, or parallelism might help. Requires HERDR_ENV=1."
 ---
 
+## Helper-script boundary
+
+Treat files inside any skill's `scripts/` directory as opaque executables during normal use. Never read, search, quote, summarize, or infer behavior from their source. Use only interfaces documented in `SKILL.md`, its references, or the helper's documented self-description command. If a helper fails, first determine from its response and documented interface whether the failure was clearly non-mutating. For a usage or validation error proven to have made no change, correct the invocation from those documented sources and retry at most once. Stop and report when the failure may have partially changed state, is destructive, involves credentials or authorization, remains ambiguous, or cannot be corrected after that bounded retry. The only exception to source inspection is when the user's latest request explicitly asks to inspect, debug, review, or modify that helper script itself.
+
 # Herdr
 
 Herdr organizes terminals into workspaces, tabs, and panes, recognizes coding agents running inside panes, and exposes the current session through the `herdr` CLI.
@@ -124,6 +128,34 @@ herdr pane rename <returned-pane-id> "correctness-review"
 
 Pane naming is mandatory. If naming fails, do not start work in that pane; clean up the exact owned resource or follow the invoking workflow's failure policy.
 
+### Wait for a newly created pane to become ready
+
+A tab or split response can arrive before the new interactive shell finishes its startup files. Before starting any agent or command in a pane created by the current workflow, inspect it with:
+
+```bash
+herdr pane process-info --pane <returned-pane-id>
+```
+
+A pane is ready only when `shell_pid` exists and `foreground_processes` is a complete, non-empty list containing exactly one entry whose positive integer PID equals `shell_pid`. Missing, empty, malformed, duplicate, or Boolean PID data is ambiguous and must fail closed. A blank screen, a prompt-looking final line, or a foreground process-group ID equal to the shell PID is not enough: shell startup helpers can run inside the shell's foreground process group.
+
+Record one absolute deadline when the pane is created, no later than 30 seconds after the creation request began. A resumable workflow derives that deadline conservatively from its persisted pre-create intent timestamp and never restarts the budget after resume. Save each `process-info` response, then classify the snapshot and deadline with the bundled helper:
+
+```bash
+python3 <skill-root>/scripts/classify-pane-readiness.py \
+  --input <saved-process-info.json> \
+  --expected-pane <returned-pane-id> \
+  --created-at <persisted-pre-create-intent-time> \
+  --deadline-at <original-rfc3339-deadline>
+```
+
+The helper binds the complete response type and nested pane ID to `--expected-pane`, rejects a deadline later than 30 seconds after `--created-at`, and returns `ready` only for the exact sole-shell proof. It returns `busy` for a complete shell-plus-extra-process snapshot, `expired` after the original deadline, and `ambiguous` for incomplete or unsupported evidence. Non-ready classifications use distinct nonzero exit codes. A `busy` result is not automatically shell warm-up: inspect the saved process evidence and continue only when the pane was just created and every extra process is clearly a noninteractive helper from that shell's startup sequence. A real command, editor, existing agent, unknown process, or uncertain origin is not recoverable.
+
+Recheck proven shell warm-up within the one bounded readiness budget by passing the prior saved snapshot through `--previous-input`. The only permitted process transition is the disappearance of startup helpers while the exact pane and shell PID remain stable; a changed pane or shell identity is ambiguous. Apply the gate to every root and split pane, and make all required panes ready before starting a synchronized agent batch. Do not send input, kill the helper, focus the pane, create a replacement pane, change the model resolution, or ask the user while this bounded warm-up is in progress.
+
+If `agent start` returns `agent_pane_busy` before it creates an agent session, preserve that complete error response and inspect the exact owned pane again. When the only extra foreground work is still proven shell initialization and the original readiness budget remains, continue the same bounded gate and retry the same start once after the shell becomes the sole foreground process. Record the busy response, every snapshot, and every classification through the invoking workflow's durable state before retrying. This is pre-launch readiness recovery, not a failed launch or model fallback: the launch intent remains planned and unconsumed, and the workflow keeps the same pane, runtime name, model resolution, and launch intent. A repeated `agent_pane_busy` response exhausts this exception and blocks after exact cleanup.
+
+Block and clean up through the invoking workflow only after the readiness budget expires, the pane disappears, the classifier returns `ambiguous`, the extra process is not proven shell initialization, a command/editor/existing agent occupies the pane, or an agent may already have started. Never retry an ambiguous or partial launch. Do not use an unbounded poll or a shell `sleep` loop for readiness checks.
+
 An available shell pane must be at its interactive prompt, with the shell itself in the foreground and no foreground command, editor, or agent running. Skills running inside Pi must start only Pi agents in Herdr panes. Herdr requires an explicit `--kind`, so always pass `--kind pi`; never select Codex, Claude, Gemini, or any other agent kind, even if another kind is installed or requested:
 
 ```bash
@@ -133,7 +165,7 @@ herdr agent start reviewer --kind pi --pane <returned-pane-id> -- \
 
 Run `herdr agent` only to confirm that the required Pi kind is available and to inspect command options. If Pi is unavailable, do not substitute another kind; clean up owned resources and block the workflow. Pass Pi arguments only after `--`. The complete argument set must come from one model-routing resolution; do not hand-build or partially override it.
 
-A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. Preserve the resolution's SHA-256 digest before launch, save the complete JSON start response, and run the shared policy's `verify-launch` command with both artifacts before prompting. Its `result.argv` must prove the resolved provider, model, and thinking level. When available, also compare the child Pi environment (`PI_PROVIDER`, `PI_MODEL`, and `PI_REASONING_LEVEL`) through a saved runtime-environment artifact. A mismatch or missing setting requires cleanup of the exact owned resources and the invoking workflow's failure path. If the agent is blocked during startup, the command returns `agent_not_ready` immediately but keeps the name available for `agent read` and `agent send-keys`. Inspect the blocked state and use a bounded `agent wait`; never wait indefinitely. On timeout or failure, preserve available output and clean up only the exact resources owned by the invoking workflow. Wait until the agent becomes idle before prompting it. Startup defaults to a 30-second timeout.
+A successful `agent start` returns only after Herdr detects the expected agent in the same pane and considers it ready for interactive input. Preserve the resolution's SHA-256 digest before launch, save the complete JSON start response, and run the shared policy's `verify-launch` command with both artifacts before prompting. Its `result.argv` must prove the resolved provider, model, and thinking level. When available, also compare the child Pi environment (`PI_PROVIDER`, `PI_MODEL`, and `PI_REASONING_LEVEL`) through a saved runtime-environment artifact. A mismatch or missing setting requires cleanup of the exact owned resources and the invoking workflow's failure path. The bounded `agent_pane_busy` pre-launch recovery above is the only startup failure that may reuse the same pane and launch intent. If the agent is blocked during startup, the command returns `agent_not_ready` immediately but keeps the name available for `agent read` and `agent send-keys`; that is not pane warm-up. Inspect the blocked state and use a bounded `agent wait`; never wait indefinitely. On timeout or any other failure, preserve available output and clean up only the exact resources owned by the invoking workflow. Wait until the agent becomes idle before prompting it. Startup defaults to a 30-second timeout.
 
 When the authorizing workflow permits automatic model fallback, replacement is allowed only after a verified launch that then fails for a confirmed model-specific reason without producing useful work. Preserve evidence from the failed candidate first. Close the failed candidate's exact pane; when it is the tab's last pane, that pane closure also removes the empty tab. If peer agents are already started—whether still idle before a synchronized prompt wave or actively working—leave those exact peers alone, split a fresh unfocused pane from a surviving pane, preserve the working directory, and rename it for the same responsibility. Complete and verify every required replacement before sending a synchronized wave's first prompt. Never start the replacement in a pane that may still contain the failed process. The replacement must use a fresh unique agent name, Pi session, chained failure and cleanup evidence, resolution artifact, start response, and launch verification. Startup, Herdr setup, and provenance failures are not model fallback events.
 
@@ -181,9 +213,16 @@ Create a sibling pane with the same geometry rule, preserve the caller's working
 herdr pane split --current --direction right --cwd "$PWD" --no-focus
 ```
 
-Read the new pane ID from `.result.pane.pane_id`, then run and inspect the command:
+Read the new pane ID from `.result.pane.pane_id`, name it for its responsibility, and apply the bounded readiness gate above. Run the command only after the classifier proves that the shell is the sole foreground process:
 
 ```bash
+herdr pane rename <returned-pane-id> "test-command"
+herdr pane process-info --pane <returned-pane-id> > <saved-process-info.json>
+python3 <skill-root>/scripts/classify-pane-readiness.py \
+  --input <saved-process-info.json> \
+  --expected-pane <returned-pane-id> \
+  --created-at <persisted-pre-create-intent-time> \
+  --deadline-at <original-rfc3339-deadline>
 herdr pane run <returned-pane-id> "just test"
 herdr pane wait-output <returned-pane-id> --match "test result" --timeout 120000
 herdr pane read <returned-pane-id> --source recent-unwrapped --lines 120

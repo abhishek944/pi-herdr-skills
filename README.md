@@ -127,7 +127,7 @@ The implementation and review workflows require Herdr-hosted Pi agents.
    herdr integration status
    ```
 
-The agent workflows never silently weaken their requirements. When automatic routing hits a model-specific quota or availability failure before any useful work, they try another eligible catalog model with the same task, quality, input, thinking, and review requirements. Explicit user model choices, Herdr setup failures, uncertain partial work, exhausted candidates, and launch-verification failures still stop safely. Read the [Herdr agent guide](https://herdr.dev/agent-guide.md) for concepts and controls.
+The agent workflows never silently weaken their requirements. A newly created pane may briefly remain busy while its shell finishes startup; the workflows now wait through that bounded warm-up before declaring setup failed. When automatic routing hits a model-specific quota or availability failure before any useful work, they try another eligible catalog model with the same task, quality, input, thinking, and review requirements. Explicit user model choices, Herdr setup failures that remain after readiness recovery, uncertain partial work, exhausted candidates, and launch-verification failures still stop safely. Read the [Herdr agent guide](https://herdr.dev/agent-guide.md) for concepts and controls.
 
 ## Extensions in the source setup
 

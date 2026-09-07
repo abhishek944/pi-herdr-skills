@@ -371,7 +371,14 @@ if errors:
 task_outputs = [task.get("runtime", {}).get("output_path") for task in whole["tasks"].values() if task.get("runtime", {}).get("productive_prompt") and task.get("runtime", {}).get("output_path")]
 intent_outputs = [intent.get("output_path") for task in whole["tasks"].values() for intent in task.get("runtime_intents", []) if intent.get("status") == "bound" and intent.get("output_path")]
 closure_outputs = [resource.get("closure_artifact") for task in whole["tasks"].values() for resource in task.get("runtime_resources", []) if resource.get("status") == "closed" and resource.get("closure_artifact")]
-artifact_relatives = [combined, *outputs, contract_pack_relative, contract_preflight_relative, os.path.relpath(expected_evidence, state_dir), *[item.get("artifact") for item in test_evidence if isinstance(item, dict) and item.get("artifact")], *[item.get("artifact") for item in behavior_evidence if isinstance(item, dict) and item.get("artifact")], *task_outputs, *intent_outputs, *closure_outputs]
+perspectives = state.get("review_perspectives") or {}
+review_proof_outputs = [
+    (item.get(field) or {}).get("path")
+    for item in perspectives.values()
+    for field in ("resolution_artifact", "start_response_artifact", "verification_artifact")
+    if (item.get(field) or {}).get("path")
+]
+artifact_relatives = [combined, *outputs, *review_proof_outputs, contract_pack_relative, contract_preflight_relative, os.path.relpath(expected_evidence, state_dir), *[item.get("artifact") for item in test_evidence if isinstance(item, dict) and item.get("artifact")], *[item.get("artifact") for item in behavior_evidence if isinstance(item, dict) and item.get("artifact")], *task_outputs, *intent_outputs, *closure_outputs]
 artifact_digests = {}
 for relative in artifact_relatives:
     if relative:

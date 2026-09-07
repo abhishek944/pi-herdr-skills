@@ -9,11 +9,12 @@ scopes=()
 
 usage() {
   cat >&2 <<'EOF'
-Usage: review-fingerprint.sh [--base REF] [--target REF|WORKTREE] [--scope PATH ...] [--format hash|json]
+Usage: review-fingerprint.sh [--base REF] [--target REF|WORKTREE] [--scope PATH]... [--format hash|json]
 
-The default target is the current index and worktree relative to HEAD. Scope
-paths must be repository-relative. The JSON format reports the resolved base,
-target, and normalized scope that must be persisted with the fingerprint.
+The default target is the current index and worktree relative to HEAD. Repeat
+`--scope PATH` for each repository-relative path. The JSON format reports the
+resolved base, target, and normalized scope that must be persisted with the
+fingerprint.
 EOF
 }
 

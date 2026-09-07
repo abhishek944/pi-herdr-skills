@@ -236,6 +236,47 @@ Every model selection is bound to the preserved resolver artifact and its pre-la
 
 ## Atomic updates
 
+List every supported event without reading helper source or changing state:
+
+```bash
+python3 <skill-root>/scripts/state-store.py events
+```
+
+### Exact root bootstrap sequence
+
+After `init-state.sh` succeeds, export the printed root credentials and use these event names and payload shapes in order:
+
+```bash
+export IMPLEMENT_TASK_CAPABILITY='<root-owner-token>'
+export IMPLEMENT_COORDINATOR_LEASE_ID='<coordinator-lease-id>'
+STATE='var/<feature-name>/implement/state.json'
+STORE='<skill-root>/scripts/state-store.py'
+
+python3 "$STORE" apply "$STATE" --actor task-0001 \
+  --event-json '{"type":"set-run","updates":{"user_goal":"<requested outcome>"}}'
+
+python3 "$STORE" apply "$STATE" --actor task-0001 \
+  --event-json '{"type":"update-contract","updates":{"title":"<title>","outcome":"<one outcome>","acceptance_criteria":["<criterion>"],"boundaries":["<boundary>"],"inputs":["<input>"],"expected_result":"<result>"}}'
+
+python3 "$STORE" apply "$STATE" --actor task-0001 \
+  --event-json '{"type":"add-todo","title":"Read project instructions","acceptance":"Applicable rules are understood"}'
+
+# Add the remaining root todos before advancing.
+python3 "$STORE" apply "$STATE" --actor task-0001 \
+  --event-json '{"type":"set-run-phase","phase":"plan"}'
+
+bash <skill-root>/scripts/validate-plan.sh <feature-name>
+
+python3 "$STORE" apply "$STATE" --actor task-0001 \
+  --event-json '{"type":"set-task-status","status":"working"}'
+python3 "$STORE" apply "$STATE" --actor task-0001 \
+  --event-json '{"type":"set-run-phase","phase":"execute"}'
+```
+
+`set-run` owns `run.user_goal`; `update-contract` owns the root task's title, outcome, acceptance criteria, boundaries, inputs, and expected result. There is no `set-root-contract` event.
+
+`apply` writes the state file only after the complete event validates. If it rejects an unknown event, malformed payload, or invalid transition, the state file remains unchanged. For those clearly non-mutating usage errors, consult `events`, correct the invocation, and retry once. Do not retry credential or authorization failures, malformed existing state, ambiguous failures, or any command that may have produced an external side effect.
+
 Read state:
 
 ```bash
@@ -260,11 +301,11 @@ python3 <skill-root>/scripts/state-store.py validate \
   var/<feature-name>/implement/state.json
 ```
 
-Event families cover run configuration and phase transitions, root contract updates, parent-owned child replanning, todos, children, frozen model selection, agent slots, runtime records, resources, results, task transitions, two-phase cancellation, typed integration updates, final certification, and completion.
+Event families cover run configuration and phase transitions, root contract updates, parent-owned child replanning, todos, children, frozen model selection, agent slots, runtime records, typed `record-pane-readiness` evidence, resources, results, task transitions, two-phase cancellation, typed integration updates, final certification, and completion.
 
 ## Runtime ownership
 
-Before an external create, the delegating task records a unique runtime intent, target task, runtime name, and output artifact under `outputs/`. The Herdr JSON create response is redirected to that artifact before IDs are parsed. Binding rechecks output-folder containment, verifies its digest, parses the saved JSON at the intent's declared response-ID path, and requires that ID and resource kind to match. Agent intents are single-use per attempt and may launch only their declared direct-child target. This leaves durable recovery evidence even if the coordinator stops between create and state binding.
+Before an external create, the delegating task records a unique runtime intent, target task, runtime name, and output artifact under `outputs/`. The Herdr JSON create response is redirected to that artifact before IDs are parsed. Binding rechecks output-folder containment, verifies its digest, parses the saved JSON at the intent's declared response-ID path, and requires that ID and resource kind to match. For a pane, the persisted pre-create intent timestamp is also the conservative anchor for its immutable 30-second readiness deadline; every process snapshot and classifier result is preserved as evidence, and resume never restarts that budget. Agent intents are single-use per attempt and may launch only their declared direct-child target. A proven pre-launch `agent_pane_busy` shell warm-up before any agent session exists is not a consumed launch: after `record-pane-readiness` binds the exact pane, immutable deadline, digest-bound snapshots, classifications, and complete busy response, the same agent intent remains planned and unconsumed and may retry once within its original readiness deadline. This typed evidence is the only planned-intent exception that reconciliation may carry forward; a repeated busy response and every other failed, ambiguous, expired, or partial start fail the intent and require the normal cleanup path. This leaves durable recovery evidence even if the coordinator stops between create and state binding.
 
 Runtime records bind the task to:
 

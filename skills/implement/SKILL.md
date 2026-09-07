@@ -4,6 +4,10 @@ description: "Repository-agnostic recursive implementation conductor: maintain a
 compatibility: Requires a repository checkout, standard file and shell tools, Herdr, and Herdr-hosted Pi agents.
 ---
 
+## Helper-script boundary
+
+Treat files inside any skill's `scripts/` directory as opaque executables during normal use. Never read, search, quote, summarize, or infer behavior from their source. Use only interfaces documented in `SKILL.md`, its references, or the helper's documented self-description command. If a helper fails, first determine from its response and documented interface whether the failure was clearly non-mutating. For a usage or validation error proven to have made no change, correct the invocation from those documented sources and retry at most once. Stop and report when the failure may have partially changed state, is destructive, involves credentials or authorization, remains ambiguous, or cannot be corrected after that bounded retry. The only exception to source inspection is when the user's latest request explicitly asks to inspect, debug, review, or modify that helper script itself.
+
 Resolve `<skill-root>` to the directory containing this `SKILL.md`. Work from the repository root unless project instructions say otherwise.
 
 ## User-facing language
@@ -51,7 +55,9 @@ bash <skill-root>/scripts/init-state.sh <feature-name> --resume
 
 Initialization captures the initial dirty-worktree snapshot and prints the root owner token, coordinator lease ID, and coordinator instance ID. Keep credentials out of state, artifacts, logs, process arguments, and user-facing replies. Set the token and lease as `IMPLEMENT_TASK_CAPABILITY` and `IMPLEMENT_COORDINATOR_LEASE_ID` for root updates. An expired lease takeover requires a fresh lease ID and creates a fresh coordinator instance, fencing the old coordinator. A persisted reconciliation gate blocks normal work until live slots and resources are checked against Herdr state.
 
-Immediately record the user goal and create root todos through `scripts/state-store.py`. The first todos normally cover reading instructions, tracing current behavior, planning, implementation, automated checks, visual verification when applicable, a user test handoff, integration, and final review. Add agent-run live behavior verification only when the user's latest request explicitly asks for it. Keep todos current as work proceeds; do not reconstruct them at the end.
+Immediately record the user goal, root contract, and root todos through `scripts/state-store.py`. Use the exact bootstrap sequence in [references/state-schema.md](references/state-schema.md); do not invent event names. The first todos normally cover reading instructions, tracing current behavior, planning, implementation, automated checks, visual verification when applicable, a user test handoff, integration, and final review. Add agent-run live behavior verification only when the user's latest request explicitly asks for it. Keep todos current as work proceeds; do not reconstruct them at the end.
+
+If an event name is uncertain or rejected without changing state, run the helper's documented `events` command, correct the event from that output, and retry once. Never inspect the helper source during ordinary implementation. A failed event application is non-mutating because the helper writes state only after the event validates successfully; credential, authorization, malformed-state, and ambiguous failures still stop immediately.
 
 `state.json` is the only mutable state authority for the run and every descendant. Large reports, recordings, transcripts, and patches live under the same run folder and are referenced from the JSON. Agents must never edit the JSON directly; use the state helper so updates are locked, capability-authenticated, coordinator-leased, validated, revisioned, and atomic. State stores only capability hashes; raw task capabilities are runtime credentials.
 
@@ -123,7 +129,7 @@ Use the shared resolver's structured capability and thinking metadata. Do not im
 - live Pi availability evidence;
 - reviewer baselines, comparison rule, and verified stronger escalation.
 
-Store the resolver's emitted `stateSelection` object without hand-converting fields, and bind it to the resolver artifact path and pre-launch digest. Every Pi launch passes provider, model, and thinking level explicitly. Save the complete runtime start response, record `launched_thinking_level`, and verify all three settings through the shared policy before prompting. An automatic candidate that has a confirmed model-specific failure before producing any usable contribution may advance the same immutable task through `prepare-fallback` only after exact resource cleanup. That atomic event validates the chained resolution, unchanged routing zone, prior selected model, failure and cleanup evidence, empty task result, and remaining attempt budget before reserving the replacement slot. User-pinned, ambiguous, post-contribution, provenance, and Herdr setup failures block without fallback.
+Store the resolver's emitted `stateSelection` object without hand-converting fields, and bind it to the resolver artifact path and pre-launch digest. Every Pi launch passes provider, model, and thinking level explicitly. Save the complete runtime start response, record `launched_thinking_level`, and verify all three settings through the shared policy before prompting. An automatic candidate that has a confirmed model-specific failure before producing any usable contribution may advance the same immutable task through `prepare-fallback` only after exact resource cleanup. That atomic event validates the chained resolution, unchanged routing zone, prior selected model, failure and cleanup evidence, empty task result, and remaining attempt budget before reserving the replacement slot. A newly created pane still running shell initialization first follows the Herdr skill's bounded pre-launch readiness recovery; it is neither model fallback nor a new attempt. User-pinned, ambiguous, post-contribution, provenance, and Herdr setup failures that remain after bounded readiness recovery block without fallback.
 
 ## Runtime selection
 
@@ -143,13 +149,14 @@ For every immediate child wave, the delegating task:
 4. treats the returned root pane as the first child's pane and never leaves an extra coordinator shell in the child tab;
 5. for each remaining child only, records a pane intent and creates one split pane, injecting only that child's raw capability, until the tab has exactly one pane per child;
 6. after every root or split pane ID is bound, uses `herdr pane rename` to assign a distinct name describing that child's outcome and records the name with the resource; pane names are mandatory;
-7. starts every child concurrently in its named pane as a Pi agent using `--kind pi`, passing its recorded provider/model/thinking selection explicitly through Pi with a unique runtime name and bounded deadline;
-8. records immutable agent-session provenance, verifies the complete launch against the preserved resolution digest, and records the digest-bound verification artifact before moving the runtime to working;
-9. after all Pi agents start and every verification is preserved, launches one `herdr agent prompt ... --wait` process per child concurrently with its complete handoff; while those processes are still running, observes each agent enter working state and immediately records dispatch through the dedicated write-once productive-prompt event;
-10. only after dispatch is durably recorded, joins the concurrent prompt-and-wait processes with deadlines of at least `900000` milliseconds (15 minutes), while preserving the runtime schema's three-hour maximum; overdue work follows timeout cancellation rather than successful settlement;
-11. stores each complete child handoff under the run outputs folder and records its digest;
-12. records observed runtime settlement, then atomically accepts successful blocker-free child tasks with parent verification evidence, which marks them done and releases their slots;
-13. closes only exact recorded resources, saving and digesting each close response; preserved resources keep the task blocked until verified closure.
+7. derives each pane's immutable readiness deadline conservatively from its persisted pre-create intent timestamp, records every process snapshot, classification, and optional first `agent_pane_busy` response through the typed `record-pane-readiness` state event, applies the Herdr skill's bounded readiness gate to every newly created pane without restarting the budget after resume, makes the complete batch ready before starting any child, and allows at most one same-pane start retry when the gate proves shell initialization is still in progress and no agent session exists;
+8. starts every child concurrently in its named pane as a Pi agent using `--kind pi`, passing its recorded provider/model/thinking selection explicitly through Pi with a unique runtime name and bounded deadline;
+9. records immutable agent-session provenance, verifies the complete launch against the preserved resolution digest, and records the digest-bound verification artifact before moving the runtime to working;
+10. after all Pi agents start and every verification is preserved, launches one `herdr agent prompt ... --wait` process per child concurrently with its complete handoff; while those processes are still running, observes each agent enter working state and immediately records dispatch through the dedicated write-once productive-prompt event;
+11. only after dispatch is durably recorded, joins the concurrent prompt-and-wait processes with deadlines of at least `900000` milliseconds (15 minutes), while preserving the runtime schema's three-hour maximum; overdue work follows timeout cancellation rather than successful settlement;
+12. stores each complete child handoff under the run outputs folder and records its digest;
+13. records observed runtime settlement, then atomically accepts successful blocker-free child tasks with parent verification evidence, which marks them done and releases their slots;
+14. closes only exact recorded resources, saving and digesting each close response; preserved resources keep the task blocked until verified closure.
 
 A child may create a separate tab for its descendants, but it must never control or close the tab containing itself. The resource creator owns cleanup. The root may reclaim descendant resources only during cancellation or recovery and only from exact recorded IDs.
 

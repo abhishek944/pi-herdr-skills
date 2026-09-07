@@ -57,9 +57,75 @@ for path in skill_files:
     assert name not in seen, f"duplicate skill name: {name}"
     seen.add(name)
 
+plainspoken_policy = (root / "skills/plainspoken-responses/SKILL.md").read_text()
+assert "## Helper-script boundary" not in plainspoken_policy, "the writing-only skill must not impose helper execution policy"
+for path in skill_files:
+    if path.name == "SKILL.md" and path.parent.name == "plainspoken-responses":
+        continue
+    text = path.read_text()
+    assert "retry at most once" in text, f"missing bounded helper recovery in {path}"
+    assert "proven to have made no change" in text, f"helper recovery must require non-mutation proof in {path}"
+    assert "stop and report the documentation gap instead of inspecting the script" not in text, f"obsolete unconditional stop policy remains in {path}"
+
 herdr_policy = (root / "skills/herdr/SKILL.md").read_text()
 assert "at least `900000` milliseconds (15 minutes)" in herdr_policy, "Herdr must enforce the 15-minute minimum productive subagent wait"
 assert "--wait --timeout 900000" in herdr_policy, "Herdr's productive prompt example must use the 15-minute minimum"
+readiness_contracts = [
+    "herdr pane process-info --pane <returned-pane-id>",
+    "exactly one entry whose positive integer PID equals `shell_pid`",
+    "Missing, empty, malformed, duplicate, or Boolean PID data is ambiguous and must fail closed.",
+    "one absolute deadline",
+    "never restarts the budget after resume",
+    "foreground process-group ID equal to the shell PID is not enough",
+    "classify-pane-readiness.py",
+    "--expected-pane <returned-pane-id>",
+    "--created-at <persisted-pre-create-intent-time>",
+    "--previous-input",
+    "A `busy` result is not automatically shell warm-up",
+    "If `agent start` returns `agent_pane_busy` before it creates an agent session",
+    "the launch intent remains planned and unconsumed",
+    "retry the same start once",
+    "A repeated `agent_pane_busy` response exhausts this exception",
+    "This is pre-launch readiness recovery, not a failed launch or model fallback",
+    "Never retry an ambiguous or partial launch.",
+]
+for contract in readiness_contracts:
+    assert contract in herdr_policy, f"incomplete Herdr pane-readiness contract: {contract}"
+command_section = herdr_policy.split("## Run an ordinary command in another pane\n", 1)[1].split("\n## Safety and coordination rules", 1)[0]
+for contract in ["herdr pane rename", "herdr pane process-info", "classify-pane-readiness.py", "herdr pane run"]:
+    assert contract in command_section, f"ordinary-command readiness gate is incomplete: {contract}"
+assert command_section.index("classify-pane-readiness.py") < command_section.index("herdr pane run"), "ordinary commands must wait for readiness classification"
+phase_policy = (root / "skills/implement/references/phase-machine.md").read_text()
+state_schema = (root / "skills/implement/references/state-schema.md").read_text()
+for text, label in [(phase_policy, "phase machine"), (state_schema, "state schema")]:
+    assert "persisted pre-create intent timestamp" in text, f"{label} must preserve the original readiness deadline"
+    assert "planned and unconsumed" in text, f"{label} must define the narrow warm-up intent exception"
+    assert "record-pane-readiness" in text, f"{label} must require typed readiness evidence"
+for relative in [
+    "skills/agent-review/SKILL.md",
+    "skills/design-council/SKILL.md",
+    "skills/discuss/SKILL.md",
+    "skills/grill-me/SKILL.md",
+    "skills/implement/SKILL.md",
+    "skills/implement/references/phase-machine.md",
+    "skills/ui-ux-grill-me/SKILL.md",
+]:
+    text = (root / relative).read_text()
+    assert "bounded readiness" in text, f"missing bounded pane-readiness recovery in {relative}"
+    assert "agent_pane_busy" in text, f"missing pre-launch busy recovery in {relative}"
+assert (root / "skills/herdr/scripts/classify-pane-readiness.py").is_file(), "missing pane-readiness classifier"
+assert (root / "skills/herdr/scripts/test-pane-readiness.py").is_file(), "missing pane-readiness classifier checks"
+assert (root / "skills/implement/scripts/test-pane-readiness-state.py").is_file(), "missing durable pane-readiness state checks"
+assert (root / "skills/implement/scripts/test-bootstrap-state.py").is_file(), "missing implementation bootstrap checks"
+readiness_state = (root / "skills/implement/scripts/state-store.py").read_text()
+for contract in ["event_type == \"record-pane-readiness\"", "busy_start_count", "only one proven pre-launch agent_pane_busy response", "agent launch binding requires a current final ready pane proof"]:
+    assert contract in readiness_state, f"implementation state does not enforce readiness: {contract}"
+for contract in ["SUPPORTED_EVENT_TYPES", "DEPRECATED_EVENT_TYPES", "def event_catalog()", "Did you mean", "subparsers.add_parser(\n        \"events\""]:
+    assert contract in readiness_state, f"implementation event discovery is incomplete: {contract}"
+for contract in ["### Exact root bootstrap sequence", "state-store.py events", "There is no `set-root-contract` event", "retry once"]:
+    assert contract in state_schema, f"implementation bootstrap documentation is incomplete: {contract}"
+readiness_test = (root / "skills/herdr/scripts/test-pane-readiness.py").read_text()
+assert "def require(" in readiness_test and "assert " not in readiness_test, "readiness fixtures must remain active under optimized Python"
 herdr_orchestrator_policy = (root / "skills/herdr-orchestrator/SKILL.md").read_text()
 def markdown_section(text, heading):
     marker = f"### {heading}\n"
@@ -181,6 +247,9 @@ PY
   esac
 done < <(find skills scripts -type f -print0)
 
+PYTHONDONTWRITEBYTECODE=1 PYTHONOPTIMIZE=1 python3 skills/herdr/scripts/test-pane-readiness.py >/dev/null
+PYTHONDONTWRITEBYTECODE=1 python3 skills/implement/scripts/test-pane-readiness-state.py >/dev/null
+PYTHONDONTWRITEBYTECODE=1 python3 skills/implement/scripts/test-bootstrap-state.py >/dev/null
 PYTHONDONTWRITEBYTECODE=1 python3 skills/model-routing-policy/scripts/test-user-pinning.py >/dev/null
 PYTHONDONTWRITEBYTECODE=1 python3 skills/implement/scripts/test-fallback-state.py >/dev/null 2>&1
 
@@ -228,6 +297,7 @@ assert "contract preflight" in implement.lower()
 assert "validate-contract-preflight.py" in validator
 assert "matching != [marker]" in validator
 assert "Contract pack:" in validator and "Contract preflight:" in validator
+assert "review_proof_outputs" in validator, "certification must digest reviewer resolution, start, and verification proofs"
 assert "validate-contract-preflight.py" in state_store
 assert "recompute_contract_preflight(" in state_store
 assert '"contract-review-pack.json"' in state_store

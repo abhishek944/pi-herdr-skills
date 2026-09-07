@@ -4,6 +4,10 @@ description: "Shared catalog-based policy for every global workflow that launche
 compatibility: Requires Python 3, Pi, and the bundled Pi-global model catalog at `~/.pi/agent/skills/model-routing-policy/models.json`.
 ---
 
+## Helper-script boundary
+
+Treat files inside any skill's `scripts/` directory as opaque executables during normal use. Never read, search, quote, summarize, or infer behavior from their source. Use only interfaces documented in `SKILL.md`, its references, or the helper's documented self-description command. If a helper fails, first determine from its response and documented interface whether the failure was clearly non-mutating. For a usage or validation error proven to have made no change, correct the invocation from those documented sources and retry at most once. Stop and report when the failure may have partially changed state, is destructive, involves credentials or authorization, remains ambiguous, or cannot be corrected after that bounded retry. The only exception to source inspection is when the user's latest request explicitly asks to inspect, debug, review, or modify that helper script itself.
+
 Resolve `<skill-root>` to the directory containing this `SKILL.md`. This skill is a launch gate, not an agent runtime.
 
 ## User-facing language

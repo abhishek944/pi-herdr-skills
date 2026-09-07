@@ -4,6 +4,10 @@ description: "Read-only repository investigation mode with evidence-based debugg
 compatibility: Requires a repository checkout, normal code-reading tools, Herdr, and Herdr-hosted Pi agents.
 ---
 
+## Helper-script boundary
+
+Treat files inside any skill's `scripts/` directory as opaque executables during normal use. Never read, search, quote, summarize, or infer behavior from their source. Use only interfaces documented in `SKILL.md`, its references, or the helper's documented self-description command. If a helper fails, first determine from its response and documented interface whether the failure was clearly non-mutating. For a usage or validation error proven to have made no change, correct the invocation from those documented sources and retry at most once. Stop and report when the failure may have partially changed state, is destructive, involves credentials or authorization, remains ambiguous, or cannot be corrected after that bounded retry. The only exception to source inspection is when the user's latest request explicitly asks to inspect, debug, review, or modify that helper script itself.
+
 Resolve `<skill-root>` to the directory containing this `SKILL.md`. Work from the repository root unless project instructions say otherwise.
 
 ## User-facing language
@@ -36,9 +40,9 @@ When subagents are needed:
 
 1. If `HERDR_ENV=1` and the `herdr` command is available, load and follow the globally installed `herdr` skill and use Herdr automatically. This workflow explicitly requires a dedicated background task tab rather than adding panes to the caller's tab.
 2. Capture the caller's working directory and Herdr context. In the current workspace, create one dedicated task tab with that working directory and without taking focus. Use its root pane for one subagent and create one additional unfocused pane for each additional concurrent subagent, preserving the same working directory.
-3. Parse every returned tab and pane ID from Herdr's JSON responses. Never predict an ID or derive it from layout order. Before starting agents, use `herdr pane rename` to give the root pane and every split pane a distinct name describing its evidence track; pane names are mandatory.
-4. Start one Pi subagent per named pane using the Herdr skill's mandatory `--kind pi`, passing its resolved `--provider`, `--model`, and `--thinking` Pi arguments after `--`; never launch or substitute another agent kind. Save and verify every start response through the shared model-routing policy. After all agents start, run one `herdr agent prompt ... --wait --timeout <milliseconds>` command per agent concurrently, using at least `900000` milliseconds (15 minutes), then collect every output before synthesis.
-5. Preserve the caller's focus throughout. On success or failure, close only the task tab created by this run; never close the caller's tab, pane, workspace, or session. If Herdr setup fails after creating the tab, clean up that tab and block the investigation.
+3. Parse every returned tab and pane ID from Herdr's JSON responses. Never predict an ID or derive it from layout order. Before starting agents, use `herdr pane rename` to give the root pane and every split pane a distinct name describing its evidence track; pane names are mandatory. Apply the Herdr skill's bounded readiness gate to every newly created pane and make the full batch ready before starting any agent.
+4. Start one Pi subagent per named pane using the Herdr skill's mandatory `--kind pi`, passing its resolved `--provider`, `--model`, and `--thinking` Pi arguments after `--`; never launch or substitute another agent kind. Save and verify every start response through the shared model-routing policy. A pre-launch `agent_pane_busy` response follows the Herdr skill's bounded same-pane readiness recovery and is not model fallback. After all agents start, run one `herdr agent prompt ... --wait --timeout <milliseconds>` command per agent concurrently, using at least `900000` milliseconds (15 minutes), then collect every output before synthesis.
+5. Preserve the caller's focus throughout. On success or failure, close only the task tab created by this run; never close the caller's tab, pane, workspace, or session. If Herdr setup still fails after bounded readiness recovery, clean up that tab and block the investigation.
 6. If Herdr cannot be used, block after cleanup. If a required automatically routed agent has a confirmed no-contribution model-specific failure, replace it through the shared fallback policy and collect the replacement output before synthesis. Block only when fallback is forbidden, unsafe, or exhausted.
 
 Subagents do not start other subagents.

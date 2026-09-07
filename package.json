@@ -1,6 +1,6 @@
 {
   "name": "pi-herdr-skills",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Reusable Pi skills for Herdr-backed planning, implementation, review, and visual workflows.",
   "private": true,
   "keywords": [

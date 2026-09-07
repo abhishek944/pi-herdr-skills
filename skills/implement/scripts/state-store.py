@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import difflib
 import fcntl
 import hashlib
 import json
@@ -128,6 +129,37 @@ RUN_TRANSITIONS = {
     "blocked": {"plan", "execute", "integrate", "review"},
     "complete": set(),
 }
+SUPPORTED_EVENT_TYPES = (
+    "set-run", "set-run-phase", "finish-reconciliation", "update-contract",
+    "replan-child", "add-todo", "set-todo", "add-child",
+    "rotate-child-capability", "record-model", "reserve-slot", "record-runtime",
+    "record-launch-verification", "record-productive-prompt",
+    "record-usable-contribution", "release-slot", "fail-launch",
+    "prepare-fallback", "add-runtime-intent", "record-pane-readiness",
+    "bind-runtime-intent", "fail-runtime-intent", "settle-runtime-resource",
+    "record-result", "accept-task", "set-task-status", "cancel-subtree",
+    "finalize-cancellation", "cancel-run", "update-integration",
+    "certify-integration", "complete-run",
+)
+DEPRECATED_EVENT_TYPES = {
+    "add-runtime-resource": "record and bind a runtime intent instead",
+}
+
+
+def event_catalog() -> dict[str, Any]:
+    return {
+        "mutation": "none",
+        "event_types": list(SUPPORTED_EVENT_TYPES),
+        "deprecated_event_types": DEPRECATED_EVENT_TYPES,
+        "root_bootstrap_sequence": [
+            {"type": "set-run", "event": {"type": "set-run", "updates": {"user_goal": "<requested outcome>"}}},
+            {"type": "update-contract", "event": {"type": "update-contract", "updates": {"title": "<title>", "outcome": "<one outcome>", "acceptance_criteria": ["<criterion>"], "boundaries": ["<boundary>"], "inputs": ["<input>"], "expected_result": "<result>"}}},
+            {"type": "add-todo", "event": {"type": "add-todo", "title": "<todo>", "acceptance": "<evidence required>"}},
+            {"type": "set-run-phase", "event": {"type": "set-run-phase", "phase": "plan"}},
+            {"type": "set-task-status", "event": {"type": "set-task-status", "status": "working"}},
+            {"type": "set-run-phase", "event": {"type": "set-run-phase", "phase": "execute"}},
+        ],
+    }
 
 
 def strict_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -2171,6 +2203,40 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
                     or intent_key in agent_intent_targets
                 ):
                     fail(f"task {target_task_id} has an invalid duplicate agent attempt intent")
+                readiness = intent.get("readiness")
+                if readiness is not None:
+                    if (
+                        not isinstance(readiness, dict)
+                        or not nonempty(readiness.get("pane_intent_id"))
+                        or not nonempty(readiness.get("pane_id"))
+                        or not nonempty(readiness.get("created_at"))
+                        or not nonempty(readiness.get("deadline_at"))
+                        or not isinstance(readiness.get("probes"), list)
+                        or not readiness["probes"]
+                        or readiness.get("busy_start_count", 0) not in {0, 1}
+                    ):
+                        fail(f"agent intent {intent_id} has invalid readiness state")
+                    created_at = parse_time(readiness["created_at"], "pane readiness created_at")
+                    deadline_at = parse_time(readiness["deadline_at"], "pane readiness deadline_at")
+                    if deadline_at <= created_at or deadline_at > created_at + timedelta(seconds=30):
+                        fail(f"agent intent {intent_id} has an invalid readiness deadline")
+                    for probe in readiness["probes"]:
+                        if not isinstance(probe, dict) or probe.get("classification") not in {"ready", "busy", "expired", "ambiguous"}:
+                            fail(f"agent intent {intent_id} has an invalid readiness probe")
+                        read_run_artifact(state, probe.get("snapshot"), "pane readiness snapshot")
+                        read_run_artifact(state, probe.get("classification_artifact"), "pane readiness classification")
+                    busy_artifact = readiness.get("busy_start_artifact")
+                    if readiness.get("busy_start_count", 0) == 1:
+                        _, _, busy_payload = read_run_artifact(state, busy_artifact, "pre-launch busy response")
+                        if (busy_payload.get("error") or {}).get("code") != "agent_pane_busy":
+                            fail(f"agent intent {intent_id} lacks a valid pre-launch busy response")
+                    elif busy_artifact is not None:
+                        fail(f"agent intent {intent_id} has unexpected pre-launch busy evidence")
+                if intent.get("status") == "bound" and (
+                    not isinstance(readiness, dict)
+                    or readiness["probes"][-1].get("classification") != "ready"
+                ):
+                    fail(f"bound agent intent {intent_id} lacks a final ready pane proof")
                 agent_intent_targets.add(intent_key)
             intent_ids.add(intent_id)
         resources = task.get("runtime_resources")
@@ -2436,6 +2502,12 @@ def apply_event(
     event_type = event.get("type")
     if not nonempty(event_type):
         fail("event type must be a non-empty string")
+    if event_type in DEPRECATED_EVENT_TYPES:
+        fail(f"deprecated event type: {event_type!r}; {DEPRECATED_EVENT_TYPES[event_type]}.")
+    if event_type not in SUPPORTED_EVENT_TYPES:
+        matches = difflib.get_close_matches(event_type, SUPPORTED_EVENT_TYPES, n=1, cutoff=0.45)
+        suggestion = f" Did you mean {matches[0]!r}?" if matches else ""
+        fail(f"unsupported event type: {event_type!r}.{suggestion} Run the documented 'events' command for supported names and bootstrap examples.")
     root_id = state["run"]["root_task_id"]
     if actor == root_id:
         lease = state["run"]["coordinator_lease"]
@@ -2453,6 +2525,7 @@ def apply_event(
         "record-runtime",
         "record-launch-verification",
         "bind-runtime-intent",
+        "record-pane-readiness",
         "fail-runtime-intent",
         "settle-runtime-resource",
         "release-slot",
@@ -2539,14 +2612,28 @@ def apply_event(
         evidence = event.get("evidence")
         if not nonempty(evidence):
             fail("runtime reconciliation requires evidence")
-        if any(
-            intent.get("status") == "planned"
-            for task in tasks.values()
-            for intent in task.get("runtime_intents", [])
-        ):
-            fail("planned runtime intents remain unreconciled")
+        recoverable_targets = set()
+        for task in tasks.values():
+            for intent in task.get("runtime_intents", []):
+                if intent.get("status") != "planned":
+                    continue
+                readiness = intent.get("readiness")
+                recoverable = (
+                    intent.get("kind") == "agent"
+                    and isinstance(readiness, dict)
+                    and readiness.get("busy_start_count") == 1
+                    and readiness.get("probes")
+                    and readiness["probes"][-1].get("classification") == "ready"
+                    and parse_time(readiness.get("deadline_at"), "pane readiness deadline_at") > datetime.now(timezone.utc)
+                )
+                if not recoverable:
+                    fail("planned runtime intents remain unreconciled")
+                recoverable_targets.add(intent.get("target_task_id"))
         for task_id in state["run"]["active_agent_slots"]:
-            if tasks[task_id]["runtime"].get("status") in {"not-started", "reserved"}:
+            if (
+                tasks[task_id]["runtime"].get("status") in {"not-started", "reserved"}
+                and task_id not in recoverable_targets
+            ):
                 fail(f"active task {task_id} has not been reconciled")
         state["run"]["reconciliation_required"] = False
         state["run"]["reconciliation_evidence"] = evidence
@@ -3208,6 +3295,101 @@ def apply_event(
             {**intent, "attempt": attempt, "status": "planned", "created_at": now()}
         )
 
+    elif event_type == "record-pane-readiness":
+        target = event.get("task_id", actor)
+        root_recovery = actor == root_id and state["run"].get("reconciliation_required")
+        if (
+            not isinstance(target, str)
+            or target not in tasks
+            or (target != actor and not root_recovery)
+        ):
+            fail("only the intent owner or recorded root recovery may record readiness")
+        owner = tasks[target]
+        agent_intent = next(
+            (item for item in owner["runtime_intents"] if item.get("id") == event.get("intent_id")),
+            None,
+        )
+        pane_intent = next(
+            (item for item in owner["runtime_intents"] if item.get("id") == event.get("pane_intent_id")),
+            None,
+        )
+        if (
+            agent_intent is None
+            or agent_intent.get("kind") != "agent"
+            or agent_intent.get("status") != "planned"
+            or pane_intent is None
+            or pane_intent.get("kind") != "pane"
+            or pane_intent.get("status") != "bound"
+            or pane_intent.get("resource_id") != event.get("pane_id")
+        ):
+            fail("readiness requires a planned agent intent and its exact bound pane intent")
+        created_at = parse_time(pane_intent.get("created_at"), "pane intent created_at")
+        deadline_value = event.get("deadline_at")
+        deadline_at = parse_time(deadline_value, "pane readiness deadline_at")
+        if deadline_at <= created_at or deadline_at > created_at + timedelta(seconds=30):
+            fail("pane readiness deadline must stay within 30 seconds of the pre-create intent")
+        snapshot_path, snapshot_digest, snapshot_payload = read_run_artifact(
+            state, event.get("snapshot_artifact"), "pane readiness snapshot"
+        )
+        class_path, class_digest, class_payload = read_run_artifact(
+            state, event.get("classification_artifact"), "pane readiness classification"
+        )
+        classification = event.get("classification")
+        if (
+            classification not in {"ready", "busy", "expired", "ambiguous"}
+            or class_payload.get("classification") != classification
+            or class_payload.get("expectedPane") != event.get("pane_id")
+            or class_payload.get("createdAt") != pane_intent.get("created_at")
+            or class_payload.get("deadlineAt") != deadline_value
+            or extract_json_path(snapshot_payload, "result.process_info.pane_id") != event.get("pane_id")
+        ):
+            fail("pane readiness evidence does not bind the intent, pane, deadline, and classification")
+        readiness = agent_intent.get("readiness")
+        if readiness is None:
+            readiness = {
+                "pane_intent_id": pane_intent["id"],
+                "pane_id": event["pane_id"],
+                "created_at": pane_intent["created_at"],
+                "deadline_at": deadline_value,
+                "busy_start_count": 0,
+                "busy_start_artifact": None,
+                "probes": [],
+            }
+            agent_intent["readiness"] = readiness
+        elif (
+            readiness.get("pane_intent_id") != pane_intent["id"]
+            or readiness.get("pane_id") != event["pane_id"]
+            or readiness.get("created_at") != pane_intent["created_at"]
+            or readiness.get("deadline_at") != deadline_value
+        ):
+            fail("pane readiness identity or original deadline changed")
+        previous = readiness["probes"][-1] if readiness["probes"] else None
+        if previous and previous.get("classification") == "ready":
+            fail("pane readiness cannot be rechecked after a ready proof")
+        if classification in {"ready", "busy"} and deadline_at <= datetime.now(timezone.utc):
+            fail("non-terminal pane readiness evidence arrived after the deadline")
+        busy_start_artifact = event.get("busy_start_artifact")
+        if busy_start_artifact is not None:
+            if classification != "busy" or readiness.get("busy_start_count") != 0:
+                fail("only one proven pre-launch agent_pane_busy response may be recorded")
+            busy_path, busy_digest, busy_payload = read_run_artifact(
+                state, busy_start_artifact, "pre-launch busy response"
+            )
+            if (busy_payload.get("error") or {}).get("code") != "agent_pane_busy":
+                fail("pre-launch busy response has the wrong error code")
+            readiness["busy_start_count"] = 1
+            readiness["busy_start_artifact"] = {"path": busy_path, "digest": busy_digest}
+        readiness["probes"].append(
+            {
+                "classification": classification,
+                "snapshot": {"path": snapshot_path, "digest": snapshot_digest},
+                "classification_artifact": {"path": class_path, "digest": class_digest},
+                "recorded_at": now(),
+            }
+        )
+        if len(readiness["probes"]) > 32:
+            fail("pane readiness exceeded the bounded probe limit")
+
     elif event_type == "bind-runtime-intent":
         target = event.get("task_id", actor)
         root_recovery = actor == root_id and state["run"].get("reconciliation_required")
@@ -3258,6 +3440,14 @@ def apply_event(
             for item in task.get("runtime_resources", [])
         ):
             fail("runtime resource ID must be unique across the run")
+        if intent.get("kind") == "agent":
+            readiness = intent.get("readiness")
+            if (
+                not isinstance(readiness, dict)
+                or readiness["probes"][-1].get("classification") != "ready"
+                or parse_time(readiness["deadline_at"], "pane readiness deadline_at") <= datetime.now(timezone.utc)
+            ):
+                fail("agent launch binding requires a current final ready pane proof")
         intent.update(
             {
                 "status": "bound",
@@ -3989,6 +4179,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    subparsers.add_parser(
+        "events",
+        help="list supported event names and root bootstrap examples without changing state",
+    )
+
     init_parser = subparsers.add_parser("init")
     init_parser.add_argument("path", type=Path)
     init_parser.add_argument("--feature", required=True)
@@ -4034,6 +4229,10 @@ def main() -> None:
     show_parser.add_argument("--task")
 
     args = parser.parse_args()
+    if args.command == "events":
+        print(json.dumps(event_catalog(), indent=2, sort_keys=True))
+        return
+
     path = Path(os.path.abspath(args.path))
 
     if args.command == "init":

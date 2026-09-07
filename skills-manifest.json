@@ -1,10 +1,10 @@
 {
-  "snapshot": "2026-09-02",
+  "snapshot": "2026-09-03",
   "skills": 14,
   "files": [
     {
       "path": "skills/agent-review/SKILL.md",
-      "sha256": "d80f04d703556f921b736eeea9fb0f1f8b7cd91a38ba4b43981cc77a394a1240",
+      "sha256": "4b9d60a040c5e02d29f2a2a34cbd4b1f2a4197406ec5b513cce5e9532bfd7b80",
       "executable": false
     },
     {
@@ -14,7 +14,7 @@
     },
     {
       "path": "skills/agent-review/scripts/review-fingerprint.sh",
-      "sha256": "d3385b320d63231872fd057a2f187ab8ccacff30cac3f05df816ca4aca2594fb",
+      "sha256": "927baa4c60a2cc41d9acef2b5d8ab83fa890f618d20623790be1cb0b534beb6d",
       "executable": true
     },
     {
@@ -29,7 +29,7 @@
     },
     {
       "path": "skills/browser-use/SKILL.md",
-      "sha256": "7c6479057d1eb9f815a0e2258114e72897127cc5f434f6df5cae610685a39ed6",
+      "sha256": "00a7550c794570aea37a8db0355f4e64b072e61b902aacfe546f17a064acc539",
       "executable": false
     },
     {
@@ -44,12 +44,12 @@
     },
     {
       "path": "skills/commit-and-merge/SKILL.md",
-      "sha256": "a1870fcf44148fe73afc1f5a22691155e1986a521a57ada2ea998497047cf804",
+      "sha256": "c50dae0b793973a1ced35e48fa6c92998e1e41671d1d19cfae7579d475a8f2fc",
       "executable": false
     },
     {
       "path": "skills/design-council/SKILL.md",
-      "sha256": "b28ccb686221c86178a232dab3fee968de2248d6bb86021bca4d9d277869bd45",
+      "sha256": "c8d319dd817bb788c64479bd8ee8dc94d8dacefd9a7cea420c97568551af2bdf",
       "executable": false
     },
     {
@@ -59,12 +59,12 @@
     },
     {
       "path": "skills/discuss/SKILL.md",
-      "sha256": "0ed31b02db051dd9243ef03a64cea0f04899daf1df3aa3e8700f6f65c966ffb0",
+      "sha256": "ef19f52189ad053ce8bfdc996f134bfd28b2890d136dfcf4a9c6163744495e3a",
       "executable": false
     },
     {
       "path": "skills/grill-me/SKILL.md",
-      "sha256": "dc936f3a5ca9d1b9bd877d6296c525728da7c2cd6c48ce3a81989958da7ae123",
+      "sha256": "c550a1666162818504f5099515fa9059b1689b7069779d3f44f2b98fc719908a",
       "executable": false
     },
     {
@@ -108,8 +108,23 @@
       "executable": true
     },
     {
+      "path": "skills/herdr/SKILL.md",
+      "sha256": "d02b7669be4e5472bcd79b2b18bccc8a1df631748773893b5a79c39fcb9b6976",
+      "executable": false
+    },
+    {
+      "path": "skills/herdr/scripts/classify-pane-readiness.py",
+      "sha256": "10c2d42c89280403f2ad8b8772e84578757986f1464c02e5f9acdf7db1e0d061",
+      "executable": true
+    },
+    {
+      "path": "skills/herdr/scripts/test-pane-readiness.py",
+      "sha256": "b11122f9376b209c5ade0b51a31670738a4bfa966ae9501a3de9f43902526f91",
+      "executable": true
+    },
+    {
       "path": "skills/herdr-orchestrator/SKILL.md",
-      "sha256": "8f396081d6fa41817ad75b0d7f193a22844b94e46e2ade2c83174316db992849",
+      "sha256": "0ba5a52ee678a5cf0ef0fe8dd2a8284872f11911f1b852feb86bbfb443a84a47",
       "executable": false
     },
     {
@@ -128,23 +143,18 @@
       "executable": true
     },
     {
-      "path": "skills/herdr/SKILL.md",
-      "sha256": "130049700e3ee16b6a33432acfda2dd5c76470ac70a397a99891a1a8837c7681",
-      "executable": false
-    },
-    {
       "path": "skills/implement/SKILL.md",
-      "sha256": "99483f9efc9ee10e61f6ffb8208c76e250608c13289b49976c6dcc5f39fd50c9",
+      "sha256": "d9c04742ae39591954a00c80f5d337cef568c9984459811ddf93d965951b2012",
       "executable": false
     },
     {
       "path": "skills/implement/references/phase-machine.md",
-      "sha256": "429ff14131e0307f79e00fd7cbc02fa0e98ae018446e0a998e9290954a066ac4",
+      "sha256": "512dba67f002262aced2895e0b92039cb1a04178254ab9d5c6b3d8e30b072335",
       "executable": false
     },
     {
       "path": "skills/implement/references/state-schema.md",
-      "sha256": "e3a8c982ce33b46acee4da771d9cc7858bd5703a813fb619bb343a3c51ceed10",
+      "sha256": "87b1f782fa5170aa5c27dfd58640715d91524bab692b923684bae192c6139bcc",
       "executable": false
     },
     {
@@ -164,7 +174,12 @@
     },
     {
       "path": "skills/implement/scripts/state-store.py",
-      "sha256": "1719de95371d30fdeccb5131d426f52a6022f528877df62f117cbedf6c9e979f",
+      "sha256": "4b67bda85658d68fc453740cea48ecabe02a0c9d07b0ddf9e9bb82503125aa0d",
+      "executable": true
+    },
+    {
+      "path": "skills/implement/scripts/test-bootstrap-state.py",
+      "sha256": "fca77a87c0d8250ae386bc17c41905a8b48a478e1ff306fd8196898300b6a2df",
       "executable": true
     },
     {
@@ -173,8 +188,13 @@
       "executable": true
     },
     {
+      "path": "skills/implement/scripts/test-pane-readiness-state.py",
+      "sha256": "c8e01a57e135e046666c494f09aa8f5c665e1c78dfe126614b91fa85dffc6b2a",
+      "executable": true
+    },
+    {
       "path": "skills/implement/scripts/validate-integration-review.sh",
-      "sha256": "3a25ad7764db83e2c912c8035402d67caffb26fcb1fcd2e62fff6109a2e9cb8b",
+      "sha256": "f746c47067dd0d537dc8aefd0ceb02d26446396956e6a6a46847cca47bbd6e44",
       "executable": true
     },
     {
@@ -184,12 +204,12 @@
     },
     {
       "path": "skills/model-routing-policy/SKILL.md",
-      "sha256": "60d2be4944bfde9a2e5b9829edae2685f5349645894bd0a41a2707bf6f3cfe7e",
+      "sha256": "51ad69c9db9e95b34fbc3872d59946dd060ebac5d24211ad1f1a2e068e7bfef5",
       "executable": false
     },
     {
       "path": "skills/model-routing-policy/models.json",
-      "sha256": "82c9618c22f0948b31be0c211c6111d30526dfc36c36f3e5d4188b1372ac188a",
+      "sha256": "aabb864c39b4f0f2d4d2089c3909c8176c5c2f2b00fb2a88ca9f65e170e4d0e5",
       "executable": false
     },
     {
@@ -214,12 +234,12 @@
     },
     {
       "path": "skills/read-flows/SKILL.md",
-      "sha256": "3b8ab3ea806aba1b4a6edf279d1aa3aaf52edea7278118696129cc149d5e6d2d",
+      "sha256": "e076133313bf23e4af53aeec0bd3b2ef86741f8b3f4021112159d928bd39b0a1",
       "executable": false
     },
     {
       "path": "skills/ui-ux-grill-me/SKILL.md",
-      "sha256": "7cbac2ac884b559f8ab83e7a02016eb96abebb51d77fa50c67cdef78be36e3e6",
+      "sha256": "b4489a9cd4c5dfa4e276dc170ffa2503823a7e67840aa03076bba12aaf82d1d7",
       "executable": false
     },
     {
@@ -269,7 +289,7 @@
     },
     {
       "path": "skills/visual-explainer/SKILL.md",
-      "sha256": "0073e2b8ce10ee9f97c491db3e6fc61ee5c798bc64d684ade8c424c6d9632836",
+      "sha256": "8ff1b49dbeebf19b60ecf08c5be249ad078705f2d3ef50047ad4743b4c644766",
       "executable": false
     },
     {
