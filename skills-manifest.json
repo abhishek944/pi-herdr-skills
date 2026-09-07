@@ -1,10 +1,10 @@
 {
-  "snapshot": "2026-09-03",
+  "snapshot": "2026-09-07",
   "skills": 14,
   "files": [
     {
       "path": "skills/agent-review/SKILL.md",
-      "sha256": "4b9d60a040c5e02d29f2a2a34cbd4b1f2a4197406ec5b513cce5e9532bfd7b80",
+      "sha256": "427bd5f9b8682f9fc6c9af7ec29315e6bb41c7fa2feb6a90269566975e2cb9eb",
       "executable": false
     },
     {
@@ -15,11 +15,6 @@
     {
       "path": "skills/agent-review/scripts/review-fingerprint.sh",
       "sha256": "927baa4c60a2cc41d9acef2b5d8ab83fa890f618d20623790be1cb0b534beb6d",
-      "executable": true
-    },
-    {
-      "path": "skills/agent-review/scripts/test-contract-preflight.py",
-      "sha256": "05a48867d2d70a43afd1ba5d213b9120e709268c12cbf6946f23231405057d75",
       "executable": true
     },
     {
@@ -49,7 +44,7 @@
     },
     {
       "path": "skills/design-council/SKILL.md",
-      "sha256": "c8d319dd817bb788c64479bd8ee8dc94d8dacefd9a7cea420c97568551af2bdf",
+      "sha256": "eb7206e8450c549ae030259facd28430a33dc46751c40cb9585d5eb58cfa4502",
       "executable": false
     },
     {
@@ -59,12 +54,12 @@
     },
     {
       "path": "skills/discuss/SKILL.md",
-      "sha256": "ef19f52189ad053ce8bfdc996f134bfd28b2890d136dfcf4a9c6163744495e3a",
+      "sha256": "074e96ee36653965497f71fcdd21e5e02d83f512ea5024c46dfa282daf9bd574",
       "executable": false
     },
     {
       "path": "skills/grill-me/SKILL.md",
-      "sha256": "c550a1666162818504f5099515fa9059b1689b7069779d3f44f2b98fc719908a",
+      "sha256": "9cd00d1d3ee3bb54314156bec419b3be3133e20aaeda6811d192a90ba9617820",
       "executable": false
     },
     {
@@ -109,22 +104,17 @@
     },
     {
       "path": "skills/herdr/SKILL.md",
-      "sha256": "d02b7669be4e5472bcd79b2b18bccc8a1df631748773893b5a79c39fcb9b6976",
+      "sha256": "4365771ee3e2244251049da8430e7d2930ec09d59a3d35c2e40e6c44f2732d34",
       "executable": false
     },
     {
       "path": "skills/herdr/scripts/classify-pane-readiness.py",
-      "sha256": "10c2d42c89280403f2ad8b8772e84578757986f1464c02e5f9acdf7db1e0d061",
-      "executable": true
-    },
-    {
-      "path": "skills/herdr/scripts/test-pane-readiness.py",
-      "sha256": "b11122f9376b209c5ade0b51a31670738a4bfa966ae9501a3de9f43902526f91",
+      "sha256": "5aaac483506e91dc77d930da3cda1d821de7b0e526e49538d83b69050a5c63a8",
       "executable": true
     },
     {
       "path": "skills/herdr-orchestrator/SKILL.md",
-      "sha256": "0ba5a52ee678a5cf0ef0fe8dd2a8284872f11911f1b852feb86bbfb443a84a47",
+      "sha256": "5b05a2eb33d850ff0daaf363b3cb2eca73e48fe52a7061c639861d7861462057",
       "executable": false
     },
     {
@@ -144,17 +134,17 @@
     },
     {
       "path": "skills/implement/SKILL.md",
-      "sha256": "d9c04742ae39591954a00c80f5d337cef568c9984459811ddf93d965951b2012",
+      "sha256": "79b1872b7fcf405e70923ac7e08f4055f51feb2feeefc9e253e4372c77a3499a",
       "executable": false
     },
     {
       "path": "skills/implement/references/phase-machine.md",
-      "sha256": "512dba67f002262aced2895e0b92039cb1a04178254ab9d5c6b3d8e30b072335",
+      "sha256": "e022ae368217b13f505bdeb4a037a505ba23b74c9b9efad1ccacfb6c421692b7",
       "executable": false
     },
     {
       "path": "skills/implement/references/state-schema.md",
-      "sha256": "87b1f782fa5170aa5c27dfd58640715d91524bab692b923684bae192c6139bcc",
+      "sha256": "58f4b51cb9688ee37d62d0ad10b38ed52c90905badf046371db0191cc4fded52",
       "executable": false
     },
     {
@@ -174,22 +164,7 @@
     },
     {
       "path": "skills/implement/scripts/state-store.py",
-      "sha256": "4b67bda85658d68fc453740cea48ecabe02a0c9d07b0ddf9e9bb82503125aa0d",
-      "executable": true
-    },
-    {
-      "path": "skills/implement/scripts/test-bootstrap-state.py",
-      "sha256": "fca77a87c0d8250ae386bc17c41905a8b48a478e1ff306fd8196898300b6a2df",
-      "executable": true
-    },
-    {
-      "path": "skills/implement/scripts/test-fallback-state.py",
-      "sha256": "0c7f2a799fa4d8ed540f70b1b652a847e1678e184a7b86778f7a0c22ae8781c4",
-      "executable": true
-    },
-    {
-      "path": "skills/implement/scripts/test-pane-readiness-state.py",
-      "sha256": "c8e01a57e135e046666c494f09aa8f5c665e1c78dfe126614b91fa85dffc6b2a",
+      "sha256": "5117a2466bfbebcc8c2969b29f4e6dfd18b786cf4fb9fdae2516c670c19c755d",
       "executable": true
     },
     {
@@ -218,11 +193,6 @@
       "executable": true
     },
     {
-      "path": "skills/model-routing-policy/scripts/test-user-pinning.py",
-      "sha256": "11d55be552e25766105cc8b01edca60ed54bc15feb490957a987c6cb092c70f7",
-      "executable": true
-    },
-    {
       "path": "skills/plainspoken-responses/SKILL.md",
       "sha256": "510ac46a8ce39af62bbfb57507df75e69424f947191c566ec8a09a2f5d9581d6",
       "executable": false
@@ -239,7 +209,7 @@
     },
     {
       "path": "skills/ui-ux-grill-me/SKILL.md",
-      "sha256": "b4489a9cd4c5dfa4e276dc170ffa2503823a7e67840aa03076bba12aaf82d1d7",
+      "sha256": "bf551b4e744ba9c5285c897c1b83737fec93299576b0adc2bbc42ba83e5e7d6b",
       "executable": false
     },
     {

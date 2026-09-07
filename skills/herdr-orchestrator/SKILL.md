@@ -30,6 +30,8 @@ Before any Herdr command:
 
 This skill authorizes cross-workspace inspection because that is its stated purpose. It does not authorize unbounded mutation, answering approvals, starting suggested work, or destructive cleanup.
 
+The orchestrator does not create agent work merely to rebalance existing layouts. When it inspects, recommends, or coordinates resource creation by another explicitly authorized global workflow, enforce the global Herdr topology contract: at most four total panes per tab, a 2x2 split order for four-pane groups, and a new tab for every additional group. A 14-agent batch therefore uses four tabs containing 4, 4, 4, and 2 panes. Treat any proposed fifth pane as a planning error; do not modify existing user layouts unless the user separately authorizes exact cleanup or movement targets.
+
 ## Default operating contract
 
 Default to **safe-recovery** mode and all live workspaces except the orchestrator workspace. Inspection remains observe-only. The sole automatic input this default authorizes is one narrow continuation for a verified transient infrastructure interruption that passes every recovery gate below; all other agent input still requires incident-specific user approval.

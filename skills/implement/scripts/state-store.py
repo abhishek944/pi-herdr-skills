@@ -63,6 +63,8 @@ CATALOG_INPUT_TYPES = {"text", "image", "video", "audio", "pdf"}
 REVIEW_TIER_RANK = {"basic": 1, "standard": 2, "strong": 3}
 REVIEW_TIERS = set(REVIEW_TIER_RANK)
 RESOURCE_STATUSES = {"live", "closed", "preserved"}
+READINESS_OVERFLOW_REASON = "derived deadline exceeds the supported timestamp range"
+MAX_UTC_TIMESTAMP = datetime.max.replace(tzinfo=timezone.utc)
 RUNTIME_STATUSES = {
     "not-started",
     "reserved",
@@ -215,6 +217,151 @@ def parse_time(value: Any, label: str) -> datetime:
     if parsed.tzinfo is None:
         fail(f"{label} must include a timezone")
     return parsed
+
+
+def validate_readiness_probe_evidence(
+    snapshot: Any,
+    classification_payload: Any,
+    classification: str,
+    pane_id: str,
+    created_at: str,
+    deadline_at: str,
+    allow_legacy_observation: bool = False,
+) -> None:
+    if not isinstance(classification_payload, dict) or any(
+        classification_payload.get(key) != value
+        for key, value in {
+            "classification": classification,
+            "expectedPane": pane_id,
+            "createdAt": created_at,
+            "deadlineAt": deadline_at,
+        }.items()
+    ):
+        fail("pane readiness classification artifact does not bind its recorded identity")
+    if classification == "ambiguous":
+        return
+    observed_value = classification_payload.get("observedAt")
+    if observed_value is None and allow_legacy_observation:
+        observed_value = created_at
+    observed_at = parse_time(observed_value, "pane readiness observedAt")
+    created_time = parse_time(created_at, "pane readiness createdAt")
+    deadline_time = parse_time(deadline_at, "pane readiness deadlineAt")
+    if observed_at < created_time:
+        fail("pane readiness observation predates pane creation")
+    if classification in {"ready", "busy"} and observed_at >= deadline_time:
+        fail("non-terminal pane readiness classification was observed after its deadline")
+    if classification == "expired" and observed_at < deadline_time:
+        fail("expired pane readiness classification was observed before its deadline")
+    if not isinstance(snapshot, dict) or snapshot.get("id") != "cli:pane:process_info":
+        fail("pane readiness snapshot has an invalid Herdr response ID")
+    result = snapshot.get("result")
+    if not isinstance(result, dict) or result.get("type") != "pane_process_info":
+        fail("pane readiness snapshot has an invalid Herdr response type")
+    process_info = result.get("process_info")
+    if not isinstance(process_info, dict) or process_info.get("pane_id") != pane_id:
+        fail("pane readiness snapshot belongs to a different pane")
+    shell_pid = process_info.get("shell_pid")
+    processes = process_info.get("foreground_processes")
+    if type(shell_pid) is not int or shell_pid <= 0 or not isinstance(processes, list) or not processes:
+        fail("pane readiness snapshot has invalid shell or process data")
+    if any(
+        not isinstance(item, dict) or type(item.get("pid")) is not int or item["pid"] <= 0
+        for item in processes
+    ):
+        fail("pane readiness snapshot has an invalid process PID")
+    pids = [item["pid"] for item in processes]
+    if len(set(pids)) != len(pids) or pids.count(shell_pid) != 1:
+        fail("pane readiness snapshot has duplicate PIDs or does not contain its shell exactly once")
+    extras = [str(item.get("name") or "unknown") for item in processes if item["pid"] != shell_pid]
+    expected = {
+        "classification": classification,
+        "expectedPane": pane_id,
+        "createdAt": created_at,
+        "deadlineAt": deadline_at,
+        "paneId": pane_id,
+        "shellPid": shell_pid,
+    }
+    if classification == "ready":
+        expected["reason"] = "the interactive shell is the sole foreground process"
+        if extras:
+            fail("a ready pane snapshot still contains foreground helpers")
+    elif classification == "busy":
+        expected.update({
+            "reason": "the shell has additional foreground work",
+            "extraProcessCount": len(extras),
+            "extraProcessNames": extras,
+        })
+        if not extras:
+            fail("a busy pane snapshot contains only the shell")
+    elif classification == "expired":
+        expected["reason"] = "the original pane-readiness deadline has elapsed"
+    if classification_payload.get("observedAt") is not None:
+        expected["observedAt"] = classification_payload["observedAt"]
+    elif not allow_legacy_observation:
+        fail("pane readiness classification lacks its observation time")
+    if classification_payload != expected:
+        fail("pane readiness classification does not match the complete process snapshot")
+
+
+def validate_readiness_probe_transition(previous_snapshot: Any, current_snapshot: Any) -> None:
+    previous = previous_snapshot["result"]["process_info"]
+    current = current_snapshot["result"]["process_info"]
+    if previous["pane_id"] != current["pane_id"] or previous["shell_pid"] != current["shell_pid"]:
+        fail("pane or shell identity changed between readiness probes")
+    shell_pid = previous["shell_pid"]
+    previous_extras = {
+        item["pid"]: item
+        for item in previous["foreground_processes"]
+        if item["pid"] != shell_pid
+    }
+    current_extras = {
+        item["pid"]: item
+        for item in current["foreground_processes"]
+        if item["pid"] != shell_pid
+    }
+    if any(previous_extras.get(pid) != item for pid, item in current_extras.items()):
+        fail("foreground work was added or replaced between readiness probes")
+
+
+def failed_attempt_resources(tasks: dict[str, Any], target: str, attempt: int) -> list[dict[str, Any]]:
+    target_intent_ids = {
+        intent.get("id")
+        for owner in tasks.values()
+        for intent in owner.get("runtime_intents", [])
+        if intent.get("target_task_id") == target and intent.get("attempt", 1) == attempt
+    }
+    resources = [
+        resource
+        for owner in tasks.values()
+        for resource in owner.get("runtime_resources", [])
+        if resource.get("intent_id") in target_intent_ids
+    ]
+    parent_tab_ids = {
+        resource.get("parent_tab_id")
+        for resource in resources
+        if nonempty(resource.get("parent_tab_id"))
+    }
+    for parent_tab_id in parent_tab_ids:
+        has_live_peer = any(
+            resource.get("parent_tab_id") == parent_tab_id
+            and resource.get("intent_id") not in target_intent_ids
+            and resource.get("status") == "live"
+            for owner in tasks.values()
+            for resource in owner.get("runtime_resources", [])
+        )
+        if not has_live_peer:
+            parent_tab = next(
+                (
+                    resource
+                    for owner in tasks.values()
+                    for resource in owner.get("runtime_resources", [])
+                    if resource.get("kind") == "tab" and resource.get("id") == parent_tab_id
+                ),
+                None,
+            )
+            if parent_tab is not None:
+                resources.append(parent_tab)
+    return resources
 
 
 def token_hash(value: str) -> str:
@@ -2218,20 +2365,88 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
                         fail(f"agent intent {intent_id} has invalid readiness state")
                     created_at = parse_time(readiness["created_at"], "pane readiness created_at")
                     deadline_at = parse_time(readiness["deadline_at"], "pane readiness deadline_at")
-                    if deadline_at <= created_at or deadline_at > created_at + timedelta(seconds=30):
+                    overflow_sentinel = created_at == deadline_at == MAX_UTC_TIMESTAMP
+                    if (
+                        deadline_at < created_at
+                        or deadline_at - created_at > timedelta(seconds=30)
+                        or (deadline_at == created_at and not overflow_sentinel)
+                    ):
                         fail(f"agent intent {intent_id} has an invalid readiness deadline")
+                    overflow_probe = False
+                    terminal_probe_seen = False
+                    previous_snapshot_payload = None
+                    previous_observed_at = None
                     for probe in readiness["probes"]:
                         if not isinstance(probe, dict) or probe.get("classification") not in {"ready", "busy", "expired", "ambiguous"}:
                             fail(f"agent intent {intent_id} has an invalid readiness probe")
-                        read_run_artifact(state, probe.get("snapshot"), "pane readiness snapshot")
-                        read_run_artifact(state, probe.get("classification_artifact"), "pane readiness classification")
+                        if terminal_probe_seen:
+                            fail(f"agent intent {intent_id} has readiness evidence after a terminal probe")
+                        _, _, snapshot_payload = read_run_artifact(
+                            state, probe.get("snapshot"), "pane readiness snapshot"
+                        )
+                        _, _, class_payload = read_run_artifact(
+                            state, probe.get("classification_artifact"), "pane readiness classification"
+                        )
+                        validate_readiness_probe_evidence(
+                            snapshot_payload,
+                            class_payload,
+                            probe["classification"],
+                            readiness["pane_id"],
+                            readiness["created_at"],
+                            readiness["deadline_at"],
+                            allow_legacy_observation=readiness.get("busy_start_count", 0) == 1,
+                        )
+                        if previous_snapshot_payload is not None and probe["classification"] != "ambiguous":
+                            validate_readiness_probe_transition(previous_snapshot_payload, snapshot_payload)
+                        observed_at = parse_time(
+                            class_payload.get("observedAt") or readiness["created_at"],
+                            "readiness classification observedAt",
+                        )
+                        if previous_observed_at is not None and observed_at < previous_observed_at:
+                            fail(f"agent intent {intent_id} has non-monotonic readiness observations")
+                        previous_observed_at = observed_at
+                        probe_recorded_at = parse_time(
+                            probe.get("recorded_at"), "readiness probe recorded_at"
+                        )
+                        if probe_recorded_at < created_at:
+                            fail(f"agent intent {intent_id} records readiness before pane creation")
+                        if probe["classification"] == "expired" and probe_recorded_at < deadline_at:
+                            fail(f"agent intent {intent_id} records expiration before its deadline")
+                        previous_snapshot_payload = snapshot_payload
+                        if probe.get("classification") in {"ready", "expired", "ambiguous"}:
+                            terminal_probe_seen = True
+                        if (
+                            probe.get("classification") == "ambiguous"
+                            and class_payload.get("reason") == READINESS_OVERFLOW_REASON
+                            and class_payload.get("createdAt") == readiness["created_at"]
+                            and class_payload.get("deadlineAt") == readiness["deadline_at"]
+                        ):
+                            overflow_probe = True
+                    pane_intent = next(
+                        (candidate for candidate in intents if candidate.get("id") == readiness["pane_intent_id"]),
+                        None,
+                    )
+                    if (
+                        pane_intent is None
+                        or pane_intent.get("kind") != "pane"
+                        or pane_intent.get("target_task_id") != target_task_id
+                        or pane_intent.get("status") != "bound"
+                        or pane_intent.get("resource_id") != readiness["pane_id"]
+                    ):
+                        fail(f"agent intent {intent_id} readiness is not bound to its target pane intent")
+                    if nonempty(tasks[target_task_id]["runtime"].get("pane_id")) and (
+                        tasks[target_task_id]["runtime"]["pane_id"] != readiness["pane_id"]
+                    ):
+                        fail(f"agent intent {intent_id} readiness does not match the task runtime pane")
+                    if overflow_sentinel and (len(readiness["probes"]) != 1 or not overflow_probe):
+                        fail(f"agent intent {intent_id} lacks a terminal overflow ambiguity proof")
                     busy_artifact = readiness.get("busy_start_artifact")
                     if readiness.get("busy_start_count", 0) == 1:
-                        _, _, busy_payload = read_run_artifact(state, busy_artifact, "pre-launch busy response")
+                        _, _, busy_payload = read_run_artifact(state, busy_artifact, "legacy pre-launch busy response")
                         if (busy_payload.get("error") or {}).get("code") != "agent_pane_busy":
-                            fail(f"agent intent {intent_id} lacks a valid pre-launch busy response")
+                            fail(f"agent intent {intent_id} has invalid legacy busy-start evidence")
                     elif busy_artifact is not None:
-                        fail(f"agent intent {intent_id} has unexpected pre-launch busy evidence")
+                        fail(f"agent intent {intent_id} has unexpected busy-start evidence")
                 if intent.get("status") == "bound" and (
                     not isinstance(readiness, dict)
                     or readiness["probes"][-1].get("classification") != "ready"
@@ -2284,6 +2499,38 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
                 fail(f"task {task_id} completed with unsettled children")
             if not nonempty((task.get("result") or {}).get("summary")):
                 fail(f"task {task_id} completed without a result summary")
+
+    all_intents = {
+        intent["id"]: intent
+        for task in tasks.values()
+        for intent in task.get("runtime_intents", [])
+        if isinstance(intent, dict) and nonempty(intent.get("id"))
+    }
+    all_resources = {
+        resource["id"]: resource
+        for task in tasks.values()
+        for resource in task.get("runtime_resources", [])
+        if isinstance(resource, dict) and nonempty(resource.get("id"))
+    }
+    for resource in all_resources.values():
+        parent_tab_id = resource.get("parent_tab_id")
+        if parent_tab_id is not None and (
+            parent_tab_id not in all_resources
+            or all_resources[parent_tab_id].get("kind") != "tab"
+        ):
+            fail(f"runtime resource {resource['id']} has an invalid parent tab")
+        if resource.get("kind") == "agent" and nonempty(parent_tab_id):
+            agent_intent = all_intents.get(resource.get("intent_id"))
+            readiness = agent_intent.get("readiness") if isinstance(agent_intent, dict) else None
+            ready_pane = all_resources.get(readiness.get("pane_id")) if isinstance(readiness, dict) else None
+            if ready_pane is None or ready_pane.get("parent_tab_id") != parent_tab_id:
+                fail(f"agent resource {resource['id']} does not share its ready pane's parent tab")
+        if resource.get("reason") == "cascade-deleted-with-owned-tab" and (
+            not nonempty(parent_tab_id)
+            or all_resources[parent_tab_id].get("status") != "closed"
+            or all_resources[parent_tab_id].get("closure_digest") != resource.get("closure_digest")
+        ):
+            fail(f"runtime resource {resource['id']} lacks matching parent-tab cascade evidence")
 
     visiting: set[str] = set()
     visited: set[str] = set()
@@ -2618,15 +2865,7 @@ def apply_event(
                 if intent.get("status") != "planned":
                     continue
                 readiness = intent.get("readiness")
-                recoverable = (
-                    intent.get("kind") == "agent"
-                    and isinstance(readiness, dict)
-                    and readiness.get("busy_start_count") == 1
-                    and readiness.get("probes")
-                    and readiness["probes"][-1].get("classification") == "ready"
-                    and parse_time(readiness.get("deadline_at"), "pane readiness deadline_at") > datetime.now(timezone.utc)
-                )
-                if not recoverable:
+                if intent.get("status") == "planned":
                     fail("planned runtime intents remain unreconciled")
                 recoverable_targets.add(intent.get("target_task_id"))
         for task_id in state["run"]["active_agent_slots"]:
@@ -3131,19 +3370,7 @@ def apply_event(
             or task["runtime"].get("status") not in {"stopped", "settled"}
         ):
             fail("failed attempt requires confirmed stopped runtime state")
-        target_intent_ids = {
-            intent.get("id")
-            for owner in tasks.values()
-            for intent in owner.get("runtime_intents", [])
-            if intent.get("target_task_id") == target
-            and intent.get("attempt", 1) == task.get("attempts")
-        }
-        linked_resources = [
-            resource
-            for owner in tasks.values()
-            for resource in owner.get("runtime_resources", [])
-            if resource.get("intent_id") in target_intent_ids
-        ]
+        linked_resources = failed_attempt_resources(tasks, target, task.get("attempts"))
         if linked_resources and any(resource.get("status") != "closed" for resource in linked_resources):
             fail("close every failed-attempt runtime resource before releasing its slot")
         if target in state["run"]["active_agent_slots"]:
@@ -3181,18 +3408,9 @@ def apply_event(
             or result_state.get("evidence")
         ):
             fail("fallback cannot replace a task that recorded a usable contribution")
-        target_intent_ids = {
-            intent.get("id")
-            for owner in tasks.values()
-            for intent in owner.get("runtime_intents", [])
-            if intent.get("target_task_id") == target
-            and intent.get("attempt", 1) == task.get("attempts")
-        }
         if any(
             resource.get("status") != "closed"
-            and resource.get("intent_id") in target_intent_ids
-            for owner in tasks.values()
-            for resource in owner.get("runtime_resources", [])
+            for resource in failed_attempt_resources(tasks, target, task.get("attempts"))
         ):
             fail("fallback requires every runtime resource for the failed attempt to be closed")
         selection = validate_model_selection(
@@ -3321,12 +3539,18 @@ def apply_event(
             or pane_intent.get("kind") != "pane"
             or pane_intent.get("status") != "bound"
             or pane_intent.get("resource_id") != event.get("pane_id")
+            or pane_intent.get("target_task_id") != agent_intent.get("target_task_id")
         ):
             fail("readiness requires a planned agent intent and its exact bound pane intent")
         created_at = parse_time(pane_intent.get("created_at"), "pane intent created_at")
         deadline_value = event.get("deadline_at")
         deadline_at = parse_time(deadline_value, "pane readiness deadline_at")
-        if deadline_at <= created_at or deadline_at > created_at + timedelta(seconds=30):
+        overflow_sentinel = created_at == deadline_at == MAX_UTC_TIMESTAMP
+        if (
+            deadline_at < created_at
+            or deadline_at - created_at > timedelta(seconds=30)
+            or (deadline_at == created_at and not overflow_sentinel)
+        ):
             fail("pane readiness deadline must stay within 30 seconds of the pre-create intent")
         snapshot_path, snapshot_digest, snapshot_payload = read_run_artifact(
             state, event.get("snapshot_artifact"), "pane readiness snapshot"
@@ -3335,6 +3559,11 @@ def apply_event(
             state, event.get("classification_artifact"), "pane readiness classification"
         )
         classification = event.get("classification")
+        if overflow_sentinel and (
+            classification != "ambiguous"
+            or class_payload.get("reason") != READINESS_OVERFLOW_REASON
+        ):
+            fail("maximum timestamp readiness requires a terminal overflow ambiguity proof")
         if (
             classification not in {"ready", "busy", "expired", "ambiguous"}
             or class_payload.get("classification") != classification
@@ -3344,6 +3573,14 @@ def apply_event(
             or extract_json_path(snapshot_payload, "result.process_info.pane_id") != event.get("pane_id")
         ):
             fail("pane readiness evidence does not bind the intent, pane, deadline, and classification")
+        validate_readiness_probe_evidence(
+            snapshot_payload,
+            class_payload,
+            classification,
+            event["pane_id"],
+            pane_intent["created_at"],
+            deadline_value,
+        )
         readiness = agent_intent.get("readiness")
         if readiness is None:
             readiness = {
@@ -3364,21 +3601,29 @@ def apply_event(
         ):
             fail("pane readiness identity or original deadline changed")
         previous = readiness["probes"][-1] if readiness["probes"] else None
-        if previous and previous.get("classification") == "ready":
-            fail("pane readiness cannot be rechecked after a ready proof")
-        if classification in {"ready", "busy"} and deadline_at <= datetime.now(timezone.utc):
-            fail("non-terminal pane readiness evidence arrived after the deadline")
-        busy_start_artifact = event.get("busy_start_artifact")
-        if busy_start_artifact is not None:
-            if classification != "busy" or readiness.get("busy_start_count") != 0:
-                fail("only one proven pre-launch agent_pane_busy response may be recorded")
-            busy_path, busy_digest, busy_payload = read_run_artifact(
-                state, busy_start_artifact, "pre-launch busy response"
+        if previous and previous.get("classification") in {"ready", "expired", "ambiguous"}:
+            fail("pane readiness cannot be rechecked after a terminal proof")
+        if previous and classification != "ambiguous":
+            _, _, previous_snapshot_payload = read_run_artifact(
+                state, previous["snapshot"], "previous pane readiness snapshot"
             )
-            if (busy_payload.get("error") or {}).get("code") != "agent_pane_busy":
-                fail("pre-launch busy response has the wrong error code")
-            readiness["busy_start_count"] = 1
-            readiness["busy_start_artifact"] = {"path": busy_path, "digest": busy_digest}
+            _, _, previous_class_payload = read_run_artifact(
+                state, previous["classification_artifact"], "previous pane readiness classification"
+            )
+            if parse_time(class_payload.get("observedAt"), "readiness classification observedAt") < parse_time(
+                previous_class_payload.get("observedAt"), "previous readiness classification observedAt"
+            ):
+                fail("pane readiness observation time moved backward")
+            validate_readiness_probe_transition(previous_snapshot_payload, snapshot_payload)
+        current_time = datetime.now(timezone.utc)
+        if current_time < created_at:
+            fail("pane readiness cannot be recorded before pane creation")
+        if classification in {"ready", "busy"} and deadline_at <= current_time:
+            fail("non-terminal pane readiness evidence arrived after the deadline")
+        if classification == "expired" and deadline_at > current_time:
+            fail("pane readiness cannot expire before its deadline")
+        if event.get("busy_start_artifact") is not None:
+            fail("post-certification agent_pane_busy evidence cannot reopen readiness")
         readiness["probes"].append(
             {
                 "classification": classification,
@@ -3440,14 +3685,43 @@ def apply_event(
             for item in task.get("runtime_resources", [])
         ):
             fail("runtime resource ID must be unique across the run")
+        resource = copy.deepcopy(resource)
+        if intent.get("kind") in {"pane", "agent"}:
+            if intent["kind"] == "agent":
+                parent_tab_id = extract_json_path(response, "result.agent.tab_id")
+            elif response.get("id") == "cli:tab:create":
+                parent_tab_id = extract_json_path(response, "result.root_pane.tab_id")
+            else:
+                parent_tab_id = extract_json_path(response, "result.pane.tab_id")
+            if not nonempty(parent_tab_id) or not any(
+                item.get("kind") == "tab" and item.get("id") == parent_tab_id and item.get("status") == "live"
+                for task in tasks.values()
+                for item in task.get("runtime_resources", [])
+            ):
+                fail("pane and agent resources require an exact owned parent tab")
+            resource["parent_tab_id"] = parent_tab_id
         if intent.get("kind") == "agent":
             readiness = intent.get("readiness")
+            ready_pane_resource = next(
+                (
+                    item
+                    for task in tasks.values()
+                    for item in task.get("runtime_resources", [])
+                    if item.get("kind") == "pane" and item.get("id") == (readiness or {}).get("pane_id")
+                ),
+                None,
+            )
             if (
                 not isinstance(readiness, dict)
                 or readiness["probes"][-1].get("classification") != "ready"
                 or parse_time(readiness["deadline_at"], "pane readiness deadline_at") <= datetime.now(timezone.utc)
+                or extract_json_path(response, "result.agent.pane_id") != readiness.get("pane_id")
+                or ready_pane_resource is None
+                or ready_pane_resource.get("status") != "live"
+                or ready_pane_resource.get("parent_tab_id") != resource.get("parent_tab_id")
+                or readiness.get("busy_start_count", 0) != 0
             ):
-                fail("agent launch binding requires a current final ready pane proof")
+                fail("agent launch binding requires a current ready pane and its exact live parent tab")
         intent.update(
             {
                 "status": "bound",
@@ -3551,8 +3825,29 @@ def apply_event(
             expected_close = (
                 "cli:tab:close" if resource.get("kind") == "tab" else "cli:pane:close"
             )
+            cascade_close = False
             if (
-                closure_response.get("id") != expected_close
+                resource.get("kind") in {"pane", "agent"}
+                and closure_response.get("id") == "cli:tab:close"
+                and reason == "cascade-deleted-with-owned-tab"
+                and nonempty(resource.get("parent_tab_id"))
+            ):
+                parent_tab = next(
+                    (
+                        item
+                        for task in tasks.values()
+                        for item in task.get("runtime_resources", [])
+                        if item.get("kind") == "tab" and item.get("id") == resource["parent_tab_id"]
+                    ),
+                    None,
+                )
+                cascade_close = bool(
+                    parent_tab
+                    and parent_tab.get("status") == "closed"
+                    and parent_tab.get("closure_digest") == closure_digest
+                )
+            if (
+                (closure_response.get("id") != expected_close and not cascade_close)
                 or (closure_response.get("result") or {}).get("type") != "ok"
             ):
                 fail("resource closure artifact is not a successful matching Herdr close")

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+unset PYTHONOPTIMIZE
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
@@ -37,6 +38,25 @@ assert len(manifest_paths) == len(set(manifest_paths)), "manifest contains dupli
 expected = {item["path"]: item for item in manifest["files"]}
 actual_paths = {path.relative_to(root).as_posix() for path in (root / "skills").rglob("*") if path.is_file()}
 assert actual_paths == expected.keys(), f"skill file inventory mismatch: {actual_paths ^ expected.keys()}"
+ignored_test_roots = {".git", "var", "node_modules"}
+test_paths = []
+for path in root.rglob("*"):
+    if not path.is_file():
+        continue
+    relative = path.relative_to(root)
+    if relative.parts[0] in ignored_test_roots:
+        continue
+    name = relative.name
+    lowered_parts = {part.lower() for part in relative.parts}
+    lowered_name = name.lower()
+    if (
+        lowered_parts.intersection({"test", "tests", "__test__", "__tests__", "spec", "specs", "__spec__", "__specs__"})
+        or lowered_name.startswith(("test", "spec"))
+        or re.search(r"(^|[._-])(tests?|specs?)([._-]|$)", lowered_name)
+        or re.search(r"(Test|Tests|Spec|Specs)\.[^.]+$", name)
+    ):
+        test_paths.append(relative.as_posix())
+assert not sorted(test_paths), f"standalone test files are not part of this repository: {sorted(test_paths)}"
 for relative, item in expected.items():
     path = root / relative
     assert hashlib.sha256(path.read_bytes()).hexdigest() == item["sha256"], f"skill checksum mismatch: {relative}"
@@ -70,23 +90,33 @@ for path in skill_files:
 herdr_policy = (root / "skills/herdr/SKILL.md").read_text()
 assert "at least `900000` milliseconds (15 minutes)" in herdr_policy, "Herdr must enforce the 15-minute minimum productive subagent wait"
 assert "--wait --timeout 900000" in herdr_policy, "Herdr's productive prompt example must use the 15-minute minimum"
+for contract in [
+    "No Herdr operation performed by these skills may create a fifth pane in any tab.",
+    "exactly `ceil(N / 4)` dedicated tabs",
+    "14 agents use four tabs: three tabs with four panes and one tab with two panes",
+    "Assignment 4 is created by splitting assignment 2's pane `down` (bottom-right).",
+    "complete and verify cleanup before resolving or creating its replacement",
+    "create the replacement in the root pane of a new unfocused remainder tab",
+    "do not close or split a pane while any successful peer there is working",
+    "Assignment-to-slot order may change during fallback",
+]:
+    assert contract in herdr_policy, f"incomplete four-pane Herdr topology contract: {contract}"
 readiness_contracts = [
     "herdr pane process-info --pane <returned-pane-id>",
     "exactly one entry whose positive integer PID equals `shell_pid`",
     "Missing, empty, malformed, duplicate, or Boolean PID data is ambiguous and must fail closed.",
-    "one absolute deadline",
-    "never restarts the budget after resume",
+    "single clock anchor",
+    "never resets the deadline derived from the persisted creation anchor",
     "foreground process-group ID equal to the shell PID is not enough",
     "classify-pane-readiness.py",
     "--expected-pane <returned-pane-id>",
     "--created-at <persisted-pre-create-intent-time>",
     "--previous-input",
+    "--previous-classification",
     "A `busy` result is not automatically shell warm-up",
-    "If `agent start` returns `agent_pane_busy` before it creates an agent session",
-    "the launch intent remains planned and unconsumed",
-    "retry the same start once",
-    "A repeated `agent_pane_busy` response exhausts this exception",
-    "This is pre-launch readiness recovery, not a failed launch or model fallback",
+    "If `agent start` returns `agent_pane_busy` after a recorded ready proof",
+    "Do not reopen the terminal readiness sequence or retry the start",
+    "the pane's process history is ambiguous",
     "Never retry an ambiguous or partial launch.",
 ]
 for contract in readiness_contracts:
@@ -99,7 +129,7 @@ phase_policy = (root / "skills/implement/references/phase-machine.md").read_text
 state_schema = (root / "skills/implement/references/state-schema.md").read_text()
 for text, label in [(phase_policy, "phase machine"), (state_schema, "state schema")]:
     assert "persisted pre-create intent timestamp" in text, f"{label} must preserve the original readiness deadline"
-    assert "planned and unconsumed" in text, f"{label} must define the narrow warm-up intent exception"
+    assert "agent_pane_busy" in text and "without retry" in text, f"{label} must fail closed when a certified pane becomes busy"
     assert "record-pane-readiness" in text, f"{label} must require typed readiness evidence"
 for relative in [
     "skills/agent-review/SKILL.md",
@@ -112,20 +142,41 @@ for relative in [
 ]:
     text = (root / relative).read_text()
     assert "bounded readiness" in text, f"missing bounded pane-readiness recovery in {relative}"
-    assert "agent_pane_busy" in text, f"missing pre-launch busy recovery in {relative}"
+    assert "agent_pane_busy" in text, f"missing post-certification busy handling in {relative}"
+for relative in [
+    "skills/design-council/SKILL.md",
+    "skills/discuss/SKILL.md",
+    "skills/grill-me/SKILL.md",
+    "skills/ui-ux-grill-me/SKILL.md",
+]:
+    assert "groups of at most four" in (root / relative).read_text(), f"missing multi-tab four-pane grouping in {relative}"
+for relative in ["skills/implement/SKILL.md", "skills/implement/references/phase-machine.md"]:
+    text = (root / relative).read_text()
+    assert "groups of at most four" in text and "split child two down for child four" in text, f"incomplete implementation 2x2 grouping in {relative}"
+agent_review_policy = (root / "skills/agent-review/SKILL.md").read_text()
+assert "four-pane grid order" in agent_review_policy and "split the root pane down for reviewer three" in agent_review_policy, "agent review must use the bounded partial grid"
+assert "every created initial or fallback tab ID" in agent_review_policy and "every initial or fallback review tab" in agent_review_policy, "agent review must track and close fallback tabs"
+orchestrator_policy = (root / "skills/herdr-orchestrator/SKILL.md").read_text()
+assert "4, 4, 4, and 2 panes" in orchestrator_policy and "proposed fifth pane" in orchestrator_policy, "orchestrator must enforce the four-pane topology"
 assert (root / "skills/herdr/scripts/classify-pane-readiness.py").is_file(), "missing pane-readiness classifier"
-assert (root / "skills/herdr/scripts/test-pane-readiness.py").is_file(), "missing pane-readiness classifier checks"
-assert (root / "skills/implement/scripts/test-pane-readiness-state.py").is_file(), "missing durable pane-readiness state checks"
-assert (root / "skills/implement/scripts/test-bootstrap-state.py").is_file(), "missing implementation bootstrap checks"
 readiness_state = (root / "skills/implement/scripts/state-store.py").read_text()
-for contract in ["event_type == \"record-pane-readiness\"", "busy_start_count", "only one proven pre-launch agent_pane_busy response", "agent launch binding requires a current final ready pane proof"]:
+for contract in ["event_type == \"record-pane-readiness\"", "pane readiness cannot be recorded before pane creation", "non-monotonic readiness observations", "pane readiness observation time moved backward", "failed_attempt_resources", "exact live parent tab", "parent_tab_id", "cascade-deleted-with-owned-tab", "def validate_readiness_probe_evidence(", "def validate_readiness_probe_transition(", "readiness is not bound to its target pane intent", "readiness does not match the task runtime pane", "current ready pane and its exact live parent tab", "foreground work was added or replaced between readiness probes", "a ready pane snapshot still contains foreground helpers", "deadline_at - created_at > timedelta(seconds=30)", "READINESS_OVERFLOW_REASON", "terminal overflow ambiguity proof", "readiness evidence after a terminal probe", "cannot be rechecked after a terminal proof", "post-certification agent_pane_busy evidence cannot reopen readiness"]:
     assert contract in readiness_state, f"implementation state does not enforce readiness: {contract}"
 for contract in ["SUPPORTED_EVENT_TYPES", "DEPRECATED_EVENT_TYPES", "def event_catalog()", "Did you mean", "subparsers.add_parser(\n        \"events\""]:
     assert contract in readiness_state, f"implementation event discovery is incomplete: {contract}"
 for contract in ["### Exact root bootstrap sequence", "state-store.py events", "There is no `set-root-contract` event", "retry once"]:
     assert contract in state_schema, f"implementation bootstrap documentation is incomplete: {contract}"
-readiness_test = (root / "skills/herdr/scripts/test-pane-readiness.py").read_text()
-assert "def require(" in readiness_test and "assert " not in readiness_test, "readiness fixtures must remain active under optimized Python"
+readiness_classifier = (root / "skills/herdr/scripts/classify-pane-readiness.py").read_text()
+for contract in [
+    'parser.add_argument(\n        "--deadline-at"',
+    'deadline = created_at + timedelta(seconds=30)',
+    'else format_time(deadline)',
+    'foreground work was added or replaced during readiness recheck',
+    'the readiness clock is earlier than pane creation',
+    'readiness observation time moved backward',
+    '"observedAt": format_time(now)',
+]:
+    assert contract in readiness_classifier, f"readiness classifier must derive canonical deadlines: {contract}"
 herdr_orchestrator_policy = (root / "skills/herdr-orchestrator/SKILL.md").read_text()
 def markdown_section(text, heading):
     marker = f"### {heading}\n"
@@ -234,6 +285,151 @@ for filename, marker in licenses.items():
     assert marker in text, f"invalid or incomplete third-party license: {filename}"
 PY
 
+python3 - <<'PY'
+import copy
+import hashlib
+import importlib.util
+import json
+import subprocess
+import sys
+import tempfile
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+classifier = Path("skills/herdr/scripts/classify-pane-readiness.py").resolve()
+created = "2025-01-01T00:00:00Z"
+with tempfile.TemporaryDirectory() as directory:
+    root = Path(directory)
+    previous = root / "previous.json"
+    current = root / "current.json"
+    prior_class = root / "prior-class.json"
+    previous.write_text(json.dumps({
+        "id": "cli:pane:process_info",
+        "result": {"type": "pane_process_info", "process_info": {
+            "pane_id": "w:p1", "shell_pid": 10,
+            "foreground_processes": [{"pid": 10, "name": "shell"}, {"pid": 11, "name": "startup"}],
+        }},
+    }))
+    current.write_text(json.dumps({
+        "id": "cli:pane:process_info",
+        "result": {"type": "pane_process_info", "process_info": {
+            "pane_id": "w:p1", "shell_pid": 10,
+            "foreground_processes": [{"pid": 10, "name": "shell"}, {"pid": 12, "name": "other"}],
+        }},
+    }))
+    first = subprocess.run(
+        ["python3", str(classifier), "--input", str(previous), "--expected-pane", "w:p1", "--created-at", created, "--now", "2025-01-01T00:00:01Z"],
+        text=True, capture_output=True, check=False,
+    )
+    first_payload = json.loads(first.stdout)
+    assert first_payload["classification"] == "busy", "initial shell helper must classify busy"
+    prior_class.write_text(first.stdout)
+    changed = subprocess.run(
+        ["python3", str(classifier), "--input", str(current), "--previous-input", str(previous), "--previous-classification", str(prior_class), "--expected-pane", "w:p1", "--created-at", created, "--deadline-at", first_payload["deadlineAt"], "--now", "2025-01-01T00:00:02Z"],
+        text=True, capture_output=True, check=False,
+    )
+    assert json.loads(changed.stdout)["classification"] == "ambiguous", "replaced readiness process must fail closed"
+    later_first = subprocess.run(
+        ["python3", str(classifier), "--input", str(previous), "--expected-pane", "w:p1", "--created-at", created, "--now", "2025-01-01T00:00:20Z"],
+        text=True, capture_output=True, check=False,
+    )
+    prior_class.write_text(later_first.stdout)
+    rolled_recheck = subprocess.run(
+        ["python3", str(classifier), "--input", str(current), "--previous-input", str(previous), "--previous-classification", str(prior_class), "--expected-pane", "w:p1", "--created-at", created, "--deadline-at", json.loads(later_first.stdout)["deadlineAt"], "--now", "2025-01-01T00:00:10Z"],
+        text=True, capture_output=True, check=False,
+    )
+    assert json.loads(rolled_recheck.stdout)["classification"] == "ambiguous", "inter-probe clock rollback must fail closed"
+    empty = subprocess.run(
+        ["python3", str(classifier), "--input", str(previous), "--expected-pane", "", "--created-at", created, "--now", "2025-01-01T00:00:01Z"],
+        text=True, capture_output=True, check=False,
+    )
+    assert json.loads(empty.stdout)["classification"] == "ambiguous", "empty expected pane must fail closed"
+    rollback = subprocess.run(
+        ["python3", str(classifier), "--input", str(previous), "--expected-pane", "w:p1", "--created-at", "2025-01-01T00:00:10Z", "--now", "2025-01-01T00:00:09Z"],
+        text=True, capture_output=True, check=False,
+    )
+    assert json.loads(rollback.stdout)["classification"] == "ambiguous", "clock rollback before pane creation must fail closed"
+
+    module_path = Path("skills/implement/scripts/state-store.py").resolve()
+    spec = importlib.util.spec_from_file_location("inline_state_store_check", module_path)
+    assert spec is not None and spec.loader is not None
+    store = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(store)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    stamp = lambda value: value.isoformat().replace("+00:00", "Z")
+    capability = "inline-capability"
+    run = root / "var" / "inline" / "implement"
+    state_path = run / "state.json"
+    state = {
+        "feature_name": "inline", "revision": 0, "updated_at": stamp(now),
+        "run": {"repo_root": str(root), "root_task_id": "task-0001", "coordinator_lease": {"id": "lease", "expires_at": stamp(now + timedelta(hours=1))}, "reconciliation_required": False, "status": "running", "phase": "execute", "limits": copy.deepcopy(store.HARD_LIMITS)},
+        "integration": {"certification": None},
+        "tasks": {
+            "task-0001": {"capability_hash": store.token_hash(capability), "allow_subagents": True, "updated_at": stamp(now), "runtime_intents": [], "runtime_resources": [{"kind": "tab", "id": "w:t1", "status": "live"}, {"kind": "tab", "id": "w:t2", "status": "live"}, {"kind": "pane", "id": "w:p1", "status": "live", "parent_tab_id": "w:t1"}]},
+            "task-0002": {"parent_id": "task-0001", "runtime": {"pane_id": None}},
+            "task-0003": {"parent_id": "task-0001", "runtime": {"pane_id": None}},
+        },
+    }
+    pane_intent = {"id": "pane-intent", "kind": "pane", "status": "bound", "resource_id": "w:p1", "created_at": stamp(now), "target_task_id": "task-0003"}
+    agent_intent = {"id": "agent-intent", "kind": "agent", "status": "planned", "created_at": stamp(now), "target_task_id": "task-0002"}
+    state["tasks"]["task-0001"]["runtime_intents"] = [pane_intent, agent_intent]
+    store.validate = lambda *_args, **_kwargs: None
+    try:
+        store.apply_event(state, state_path, "task-0001", capability, "lease", {"type": "record-pane-readiness", "intent_id": "agent-intent", "pane_intent_id": "pane-intent", "pane_id": "w:p1"})
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("cross-target readiness binding must fail closed")
+
+    pane_intent["target_task_id"] = "task-0002"
+    deadline = stamp(now + timedelta(seconds=30))
+    def artifact(name, payload):
+        path = run / "outputs" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload))
+        return {"path": f"outputs/{name}", "digest": hashlib.sha256(path.read_bytes()).hexdigest()}
+    future_state = copy.deepcopy(state)
+    future_created = now + timedelta(minutes=1)
+    future_deadline = future_created + timedelta(seconds=30)
+    future_state["tasks"]["task-0001"]["runtime_intents"][0]["created_at"] = stamp(future_created)
+    future_snapshot = artifact("future-ready.json", {"id": "cli:pane:process_info", "result": {"type": "pane_process_info", "process_info": {"pane_id": "w:p1", "shell_pid": 10, "foreground_processes": [{"pid": 10, "name": "shell"}]}}})
+    future_class = artifact("future-class.json", {"classification": "ready", "reason": "the interactive shell is the sole foreground process", "expectedPane": "w:p1", "createdAt": stamp(future_created), "deadlineAt": stamp(future_deadline), "observedAt": stamp(future_created), "paneId": "w:p1", "shellPid": 10})
+    try:
+        store.apply_event(future_state, state_path, "task-0001", capability, "lease", {"type": "record-pane-readiness", "intent_id": "agent-intent", "pane_intent_id": "pane-intent", "pane_id": "w:p1", "deadline_at": stamp(future_deadline), "classification": "ready", "snapshot_artifact": future_snapshot, "classification_artifact": future_class})
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("readiness before pane creation must fail closed")
+
+    snapshot = artifact("ready.json", {"id": "cli:pane:process_info", "result": {"type": "pane_process_info", "process_info": {"pane_id": "w:p1", "shell_pid": 10, "foreground_processes": [{"pid": 10, "name": "shell"}]}}})
+    classification = artifact("ready-class.json", {"classification": "ready", "reason": "the interactive shell is the sole foreground process", "expectedPane": "w:p1", "createdAt": stamp(now), "deadlineAt": deadline, "observedAt": stamp(now), "paneId": "w:p1", "shellPid": 10})
+    ready_event = {"type": "record-pane-readiness", "intent_id": "agent-intent", "pane_intent_id": "pane-intent", "pane_id": "w:p1", "deadline_at": deadline, "classification": "ready", "snapshot_artifact": snapshot, "classification_artifact": classification}
+    store.apply_event(state, state_path, "task-0001", capability, "lease", ready_event)
+    busy_start = artifact("busy-start.json", {"error": {"code": "agent_pane_busy"}})
+    retry_event = copy.deepcopy(ready_event)
+    retry_event["busy_start_artifact"] = busy_start
+    try:
+        store.apply_event(state, state_path, "task-0001", capability, "lease", retry_event)
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("ready must remain terminal after agent_pane_busy")
+    agent_intent.update({"response_id_path": "result.agent.agent"})
+    for filename, start_pane, start_tab, message in [
+        ("wrong-pane-start.json", "w:wrong", "w:t1", "launch response for a different pane must fail closed"),
+        ("wrong-tab-start.json", "w:p1", "w:t2", "launch response for a different parent tab must fail closed"),
+    ]:
+        start = artifact(filename, {"id": "cli:agent:start", "result": {"agent": {"agent": "inline-agent", "pane_id": start_pane, "tab_id": start_tab}}})
+        agent_intent["output_path"] = start["path"]
+        try:
+            store.apply_event(state, state_path, "task-0001", capability, "lease", {"type": "bind-runtime-intent", "intent_id": "agent-intent", "resource": {"kind": "agent", "id": "inline-agent"}, "output_digest": start["digest"]})
+        except SystemExit:
+            pass
+        else:
+            raise AssertionError(message)
+PY
+
 while IFS= read -r -d '' file; do
   case "$file" in
     *.sh) bash -n "$file" ;;
@@ -246,12 +442,6 @@ PY
     *.mjs) node --check "$file" >/dev/null ;;
   esac
 done < <(find skills scripts -type f -print0)
-
-PYTHONDONTWRITEBYTECODE=1 PYTHONOPTIMIZE=1 python3 skills/herdr/scripts/test-pane-readiness.py >/dev/null
-PYTHONDONTWRITEBYTECODE=1 python3 skills/implement/scripts/test-pane-readiness-state.py >/dev/null
-PYTHONDONTWRITEBYTECODE=1 python3 skills/implement/scripts/test-bootstrap-state.py >/dev/null
-PYTHONDONTWRITEBYTECODE=1 python3 skills/model-routing-policy/scripts/test-user-pinning.py >/dev/null
-PYTHONDONTWRITEBYTECODE=1 python3 skills/implement/scripts/test-fallback-state.py >/dev/null 2>&1
 
 python3 - <<'PY'
 from pathlib import Path
@@ -281,8 +471,6 @@ for relative in [
     text = Path(relative).read_text()
     assert "no-contribution" in text, f"{relative} must distinguish safe fallback from partial work"
 PY
-PYTHONDONTWRITEBYTECODE=1 python3 skills/agent-review/scripts/test-contract-preflight.py >/dev/null
-
 python3 - <<'PY'
 from pathlib import Path
 review = Path("skills/agent-review/SKILL.md").read_text()
