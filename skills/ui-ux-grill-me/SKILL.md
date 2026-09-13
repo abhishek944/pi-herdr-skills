@@ -6,7 +6,7 @@ compatibility: Requires Node.js, browser automation, a renderable target or mock
 
 ## Helper-script boundary
 
-Treat files inside any skill's `scripts/` directory as opaque executables during normal use. Never read, search, quote, summarize, or infer behavior from their source. Use only interfaces documented in `SKILL.md`, its references, or the helper's documented self-description command. If a helper fails, first determine from its response and documented interface whether the failure was clearly non-mutating. For a usage or validation error proven to have made no change, correct the invocation from those documented sources and retry at most once. Stop and report when the failure may have partially changed state, is destructive, involves credentials or authorization, remains ambiguous, or cannot be corrected after that bounded retry. The only exception to source inspection is when the user's latest request explicitly asks to inspect, debug, review, or modify that helper script itself.
+Treat files inside any skill's `scripts/` directory as opaque executables during normal use. Never read, search, quote, summarize, or infer behavior from their source. Use only interfaces documented in `SKILL.md`, its references, or the helper's documented self-description command. If a helper fails, first determine from its response and documented interface whether the failure was clearly non-mutating. For a usage or validation error proven to have made no change, correct the invocation from those documented sources and retry. Continue correcting and retrying while each failure is clearly non-mutating and provides actionable validation feedback; do not stop merely because an earlier correction revealed another issue. Stop and report when the failure may have partially changed state, is destructive, involves credentials or authorization, becomes ambiguous, or cannot be corrected from the documented interface. The only exception to source inspection is when the user's latest request explicitly asks to inspect, debug, review, or modify that helper script itself.
 
 Resolve `<skill-root>` to the directory containing this `SKILL.md`. Work from the repository root unless project instructions say otherwise.
 
@@ -132,7 +132,7 @@ The selected screenshot is authoritative for visible hierarchy, density, spacing
 - accessibility constraints;
 - deferred branches.
 
-Implementation must reproduce and capture the same state, compare it directly, and rework material mismatches unless the user changes the contract. Hand off the feature name, UI/UX session slug, parent Grill Me slug, resolved and deferred branch IDs, selected screenshot and source, selection JSON, user modifications, route, exact viewport, fixture, and interaction state unchanged. Before Agent Review starts, every resolved branch must appear in the implementation contract-review pack with current passing visual-parity evidence.
+Implementation must reproduce and capture the same state, compare it directly, and rework material mismatches unless the user changes the contract. Hand off the feature name, UI/UX session slug, parent Grill Me slug, resolved and deferred branch IDs, selected screenshot and source, selection JSON, user modifications, route, exact viewport, fixture, and interaction state unchanged. Before Agent Review starts, hand the reviewers the decision tree, resolved decisions, selected screenshot, and current readable visual comparison directly.
 
 ## Final report
 
@@ -160,7 +160,7 @@ Implementation must reproduce and capture the same state, compare it directly, a
 - behavior and accessibility requirements
 - exact comparison checklist
 - feature name, session slug, parent Grill Me slug, and resolved/deferred branch IDs
-- contract-review pack fields and required current visual evidence
+- decision-tree handoff and required current visual evidence
 
 ## Next step
 

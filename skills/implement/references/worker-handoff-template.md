@@ -8,7 +8,7 @@ Load and follow the globally installed `implement` skill. Work from the reposito
 var/<feature-name>/implement/state.json
 ```
 
-Your raw task capability is supplied through `IMPLEMENT_TASK_CAPABILITY`. Never print it, save it in state or artifacts, pass it to descendants, or use another task's identity. You do not receive the root coordinator lease.
+Your immutable task ID, parent-owned contract, and launched Pi session define your state scope. Use only your recorded task identity from that session; you do not receive the root coordinator lease.
 
 Do not create a separate implementation state tree. Read your task, lineage, dependencies, root limits, immutable contract, and model selection before acting.
 
@@ -18,7 +18,7 @@ Before repository investigation, editing, or delegation, add todos for your task
 
 ## Logical contract
 
-When Grill Me or UI/UX Grill Me sessions apply, read the parent-supplied feature name, session slugs, decision trees, resolved and deferred branch IDs, selected screenshots, selection evidence, user modifications, exact viewport/route/fixture/state, and acceptance criteria before editing. These artifacts are immutable inputs. Report evidence for each applicable resolved decision so the root can build the final contract-review pack; deferred decisions are not requirements.
+When Grill Me or UI/UX Grill Me sessions apply, read the parent-supplied feature name, session slugs, decision trees, resolved and deferred branch IDs, selected screenshots, selection evidence, user modifications, exact viewport/route/fixture/state, and acceptance criteria before editing. These artifacts are immutable inputs. Report readable evidence for each applicable resolved decision so the root can hand the decision tree and current visual comparison directly to final reviewers; deferred decisions are not requirements.
 
 Your parent-owned task contract contains:
 
@@ -38,10 +38,10 @@ You may not rewrite or widen your contract. If it is insufficient or a new depen
 
 - If `allow_subagents` is false, work directly and do not control an agent runtime.
 - If true, delegation remains optional. Create children only for genuinely independent outcomes that materially benefit from separate context or parallel work.
-- Every child loads `implement` and receives its own task ID, raw capability, logical contract, bound model, and narrowed delegation permission.
+- Every child loads `implement` and receives its own task ID, logical contract, bound model, and narrowed delegation permission.
 - Follow the globally installed `model-routing-policy`. Capture the caller, select provider/model/thinking only from the bound Pi-global versioned catalog, preserve the resolver artifact and pre-launch digest, and record the digest-bound launch verification before any productive prompt. Review children also preserve caller/contributor baselines and the non-regressive escalation result. A child never starts its own fallback; after a confirmed no-contribution automatic-model failure, its parent may advance the same task through the state helper's evidence-bound `prepare-fallback` event.
 - Atomically reserve a root-wide slot before launch. Never exceed immediate or root-wide limits.
-- Pass only the child's capability into its environment. Never pass your capability or the root lease.
+- Pass the child's task ID and contract in its handoff. Never pass the root lease.
 - Do not launch final reviewers. Final integration and review belong to the root.
 
 ## Shared-work safety

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -26,11 +27,13 @@ TASK_CLASSES = {
 INPUT_TYPES = {"text", "image", "video", "audio", "pdf"}
 THINKING_LEVELS = ("off", "minimal", "low", "medium", "high", "xhigh", "max")
 THINKING_RANK = {value: index for index, value in enumerate(THINKING_LEVELS)}
-REVIEW_TIER_RANK = {"basic": 1, "standard": 2, "strong": 3}
+REVIEW_TIER_RANK = {"basic": 1, "standard": 2, "strong": 3, "expert": 4}
 GLOBAL_MODEL_CATALOG = (
     Path.home() / ".pi" / "agent" / "skills" / "model-routing-policy" / "models.json"
 )
 CATALOG_VERSION_RE = re.compile(r"\d{4}-\d{2}-\d{2}$")
+DELEGATION_MODES = {"routine", "review-or-exceptional-debugging", "exceptional-debugging", "baseline-only"}
+REVIEW_COMPLEXITIES = {"simple", "complicated"}
 
 
 def fail(message: str, code: int = 1) -> None:
@@ -183,13 +186,29 @@ def normalize_model(raw: Any, index: int) -> dict[str, Any]:
         fail(f"{label}.thinking.recommendedLevel must be supported")
 
     routing = raw["routing"]
+    allowed_routing_fields = {
+        "reviewTier",
+        "delegation",
+        "reviewComplexities",
+        "reviewThinking",
+    }
+    review_complexities = routing.get("reviewComplexities", []) if isinstance(routing, dict) else []
+    minimum_review_thinking = routing.get("reviewThinking", {}) if isinstance(routing, dict) else {}
     if (
         not isinstance(routing, dict)
-        or set(routing) != {"reviewTier"}
+        or not {"reviewTier"}.issubset(routing)
+        or not set(routing).issubset(allowed_routing_fields)
         or routing["reviewTier"] not in REVIEW_TIER_RANK
+        or routing.get("delegation", "baseline-only") not in DELEGATION_MODES
+        or not isinstance(review_complexities, list)
+        or len(review_complexities) != len(set(review_complexities))
+        or any(value not in REVIEW_COMPLEXITIES for value in review_complexities)
+        or not isinstance(minimum_review_thinking, dict)
+        or not set(minimum_review_thinking).issubset(set(review_complexities))
+        or any(value not in levels for value in minimum_review_thinking.values())
     ):
         fail(
-            f"{label}.routing.reviewTier must be the only routing field and use basic, standard, or strong"
+            f"{label}.routing requires valid review, delegation, and review-complexity metadata"
         )
 
     return {
@@ -201,6 +220,9 @@ def normalize_model(raw: Any, index: int) -> dict[str, Any]:
         "inputTypes": input_types,
         "qualityRank": REVIEW_TIER_RANK[routing["reviewTier"]],
         "reviewTier": routing["reviewTier"],
+        "delegation": routing.get("delegation", "baseline-only"),
+        "reviewComplexities": review_complexities,
+        "reviewThinking": minimum_review_thinking,
         "catalogOrder": index,
         "taskClassScores": class_scores,
         "thinkingLevels": levels,
@@ -308,8 +330,7 @@ def validate_preserved_fallback_chain(
     excluded = request.get("excludedModels")
     fallback = request.get("fallbackFrom")
     if (
-        resolution.get("policyVersion") != 5
-        or resolution.get("launchAllowed") is not True
+        resolution.get("launchAllowed") is not True
         or (resolution.get("catalog") or {}).get("digest") != catalog_digest
         or request.get("selectionMode") != "automatic"
         or not isinstance(excluded, list)
@@ -365,9 +386,16 @@ def validate_preserved_fallback_chain(
         "selectionMode",
         "userModel",
         "userModelAuthority",
+        "exceptionalDebuggingReason",
+        "reviewComplexity",
     }
+    def zone_value(value: dict[str, Any], key: str) -> Any:
+        if key == "reviewComplexity" and value.get("taskClass") == "review":
+            return value.get(key, "complicated")
+        return value.get(key)
+
     if (
-        any(request.get(key) != previous_request.get(key) for key in zone_keys)
+        any(zone_value(request, key) != zone_value(previous_request, key) for key in zone_keys)
         or resolution.get("caller") != previous.get("caller")
     ):
         fail("previous fallback chain changes its routing zone or caller baseline")
@@ -536,12 +564,21 @@ def review_thinking(
     baseline_thinking_rank: int,
     *,
     require_strict: bool,
+    review_complexity: str,
 ) -> str | None:
     if model["qualityRank"] < baseline_quality:
         return None
     minimum_rank = baseline_thinking_rank
     if require_strict and model["qualityRank"] == baseline_quality:
         minimum_rank += 1
+    configured_level = model["reviewThinking"].get(review_complexity)
+    if configured_level is not None:
+        if (
+            THINKING_RANK[configured_level] < minimum_rank
+            or requested not in {None, configured_level}
+        ):
+            return None
+        return configured_level
     supported = sorted(model["thinkingLevels"], key=THINKING_RANK.get)
     candidates = [level for level in supported if THINKING_RANK[level] >= minimum_rank]
     if requested:
@@ -587,6 +624,25 @@ def resolve_command(args: argparse.Namespace) -> dict[str, Any]:
     )
     by_ref = {(item["provider"], item["modelId"]): item for item in catalog["models"]}
     caller = current_caller(by_ref)
+    exceptional_reason = getattr(args, "exceptional_debugging_reason", None)
+    review_complexity = getattr(args, "review_complexity", None)
+    if args.task_class == "review":
+        if review_complexity not in REVIEW_COMPLEXITIES:
+            fail("review tasks require --review-complexity simple or complicated")
+    elif review_complexity is not None:
+        fail("--review-complexity is valid only for review tasks")
+    if exceptional_reason is not None:
+        if (
+            args.task_class != "exploration"
+            or not isinstance(exceptional_reason, str)
+            or not 40 <= len(exceptional_reason.strip()) <= 2000
+        ):
+            fail("exceptional debugging requires exploration and a 40–2000 character evidence-based reason")
+    delegation_modes = {"routine"}
+    if args.task_class == "review":
+        delegation_modes.add("review-or-exceptional-debugging")
+    if exceptional_reason is not None:
+        delegation_modes.update({"exceptional-debugging", "review-or-exceptional-debugging"})
 
     user_pin = parse_ref(args.user_model) if args.user_model else None
     fallback_values = [
@@ -621,8 +677,13 @@ def resolve_command(args: argparse.Namespace) -> dict[str, Any]:
             "selectionMode": "automatic",
             "userModel": None,
             "userModelAuthority": None,
+            "exceptionalDebuggingReason": exceptional_reason,
+            "reviewComplexity": review_complexity,
         }
-        if any(previous_request.get(key) != value for key, value in expected_request.items()):
+        comparable_previous_request = dict(previous_request)
+        if previous_request.get("taskClass") == "review" and "reviewComplexity" not in previous_request:
+            comparable_previous_request["reviewComplexity"] = "complicated"
+        if any(comparable_previous_request.get(key) != value for key, value in expected_request.items()):
             fail("fallback routing zone does not match the previous resolution")
         if previous.get("caller") != caller:
             fail("fallback caller baseline does not match the previous resolution")
@@ -799,7 +860,12 @@ def resolve_command(args: argparse.Namespace) -> dict[str, Any]:
     catalog_eligible = [
         model
         for model in catalog["models"]
-        if args.task_class in model["taskClasses"]
+        if model["delegation"] in delegation_modes
+        and args.task_class in model["taskClasses"]
+        and (
+            args.task_class != "review"
+            or review_complexity in model["reviewComplexities"]
+        )
         and required_inputs.issubset(set(model["inputTypes"]))
         and model["qualityRank"] >= args.minimum_quality_rank
         and (model["provider"], model["modelId"]) not in excluded_set
@@ -808,7 +874,7 @@ def resolve_command(args: argparse.Namespace) -> dict[str, Any]:
         pinned = by_ref[user_pin]
         if pinned not in catalog_eligible:
             fail(
-                "user-pinned model does not satisfy the requested task class, inputs, or minimum quality rank",
+                "user-pinned model does not satisfy the delegation policy, requested task class, inputs, or minimum quality rank",
                 5,
             )
         catalog_eligible = [pinned]
@@ -821,7 +887,7 @@ def resolve_command(args: argparse.Namespace) -> dict[str, Any]:
         if user_pin:
             fail("user-pinned model is unavailable; no fallback is allowed", 5)
         fail(
-            "no remaining catalog model satisfies the routing zone and live availability",
+            "no remaining permitted model satisfies the routing zone and live availability; do not widen the delegation policy",
             3,
         )
     if user_pin and args.thinking is not None and args.thinking not in eligible[0]["thinkingLevels"]:
@@ -870,6 +936,7 @@ def resolve_command(args: argparse.Namespace) -> dict[str, Any]:
                     baseline_quality,
                     baseline_thinking_rank,
                     require_strict=strict,
+                    review_complexity=review_complexity,
                 )
                 if level is not None:
                     choice = dict(model)
@@ -877,22 +944,31 @@ def resolve_command(args: argparse.Namespace) -> dict[str, Any]:
                     result.append(choice)
             return result
 
-        catalog_stronger = routed_review_candidates(catalog_eligible, True, None)
-        stronger = routed_review_candidates(eligible, True, args.thinking)
+        strict_review_escalation = review_complexity == "complicated"
+        catalog_stronger = routed_review_candidates(
+            catalog_eligible, strict_review_escalation, None
+        )
+        stronger = routed_review_candidates(
+            eligible, strict_review_escalation, args.thinking
+        )
         if not stronger:
             if user_pin:
                 fail(
-                    "user-pinned reviewer does not satisfy stronger-reviewer requirements; no fallback is allowed",
+                    "user-pinned reviewer does not satisfy the recorded review requirements; no fallback is allowed",
                     5,
                 )
             if catalog_stronger:
-                fail("the required stronger reviewer is unavailable", 4)
-            fail("the catalog contains no stronger reviewer for this task", 4)
+                fail("the required reviewer is unavailable", 4)
+            fail("the catalog contains no eligible reviewer for this task", 4)
         pool = stronger
-        status = "stronger"
+        status = "stronger" if strict_review_escalation else "peer"
         escalation = {
             "status": status,
-            "rule": "no-regression-in-model-or-thinking-and-at-least-one-strict",
+            "rule": (
+                "no-regression-in-model-or-thinking-and-at-least-one-strict"
+                if strict_review_escalation
+                else "simple-review-fresh-peer"
+            ),
             "baselines": baselines,
             "baselineQualityRank": baseline_quality,
             "baselineThinkingLevel": THINKING_LEVELS[baseline_thinking_rank],
@@ -963,7 +1039,6 @@ def resolve_command(args: argparse.Namespace) -> dict[str, Any]:
         state_selection["reviewer_escalation"] = state_escalation
 
     result = {
-        "policyVersion": 5,
         "launchAllowed": True,
         "catalog": {
             "path": str(catalog_path),
@@ -983,6 +1058,8 @@ def resolve_command(args: argparse.Namespace) -> dict[str, Any]:
             "selectionMode": "user-pinned" if user_pin else "automatic",
             "userModel": args.user_model,
             "userModelAuthority": args.user_model_authority,
+            "exceptionalDebuggingReason": exceptional_reason,
+            "reviewComplexity": review_complexity,
             "excludedModels": [f"{provider}/{model}" for provider, model in excluded_refs],
             "fallbackFrom": fallback_record,
         },
@@ -1105,6 +1182,11 @@ def recompute_resolution(
         thinking=request.get("thinking"),
         user_model=user_model,
         user_model_authority=user_model_authority,
+        exceptional_debugging_reason=request.get("exceptionalDebuggingReason"),
+        review_complexity=(
+            request.get("reviewComplexity")
+            or ("complicated" if request.get("taskClass") == "review" else None)
+        ),
         stronger_than=list(request.get("strongerThan") or []),
         stronger_than_thinking=list(request.get("strongerThanThinking") or []),
         no_contributor=request.get("noContributor") is True,
@@ -1159,7 +1241,12 @@ def verify_command(args: argparse.Namespace) -> dict[str, Any]:
     ):
         fail("resolution catalog metadata does not match the live Pi-global catalog")
     recomputed = recompute_resolution(resolution, catalog_path)
-    if resolution != recomputed:
+    comparable_resolution = copy.deepcopy(resolution)
+    comparable_request = comparable_resolution.get("request") or {}
+    if comparable_request.get("taskClass") == "review" and "reviewComplexity" not in comparable_request:
+        comparable_request["reviewComplexity"] = "complicated"
+        comparable_resolution["request"] = comparable_request
+    if any(comparable_resolution.get(key) != value for key, value in recomputed.items()):
         fail("resolution does not match the current deterministic routing decision")
     selected_model = next(
         (
@@ -1290,6 +1377,11 @@ def main() -> None:
     )
     resolve_parser.add_argument("--thinking", choices=THINKING_LEVELS)
     resolve_parser.add_argument("--user-model")
+    resolve_parser.add_argument("--review-complexity", choices=sorted(REVIEW_COMPLEXITIES))
+    resolve_parser.add_argument(
+        "--exceptional-debugging-reason",
+        help="Exploration only: evidence explaining exceptional debugging difficulty and why routine models are insufficient; never for quota or review escalation",
+    )
     resolve_parser.add_argument("--fallback-from")
     resolve_parser.add_argument("--fallback-from-digest")
     resolve_parser.add_argument("--failure-evidence")

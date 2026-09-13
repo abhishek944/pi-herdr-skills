@@ -1,99 +1,65 @@
-# Multiple Browser Sessions
+# Multiple Browser Use daemons
 
-## Why use multiple sessions
+The current Browser Use CLI no longer accepts `--session` or `BROWSER_USE_SESSION`.
+Use `BU_NAME` to route every invocation to one named harness daemon.
 
-When you need more than one browser at a time:
+## One name per task or worktree
 
-- Cloud browser for scraping + local Chrome for authenticated tasks
-- Two different Chrome profiles simultaneously
-- Isolated browser for testing that won't affect the user's browsing
-- Running a headed browser for debugging while headless runs in background
-
-## How sessions are isolated
-
-Each `--session NAME` gets:
-
-- Its own daemon process
-- Its own Unix socket (`~/.browser-use/{name}.sock`)
-- Its own PID file and state file
-- Its own browser instance (completely independent)
-- Its own tab ownership state (multi-agent locks don't cross sessions)
-
-## The `--session` flag
-
-Must be passed on every command targeting that session:
+Choose a short, descriptive name and export it before the first browser call:
 
 ```bash
-browser-use --session work open <url>      # goes to 'work' daemon
-browser-use --session work state           # reads from 'work' daemon
-browser-use state                          # goes to 'default' daemon (different browser)
+export BU_NAME=bloom-ui-4100
+browser-use <<'PY'
+new_tab("http://localhost:4100")
+wait_for_load()
+print(page_info())
+PY
 ```
 
-If you forget `--session`, the command goes to the `default` session. This is the most common mistake — you'll interact with the wrong browser.
-
-## Combining sessions with browser modes
+Every later `browser-use` invocation in that shell uses the same daemon. For an
+isolated one-off call, prefix the command instead:
 
 ```bash
-# Session 1: cloud browser
-browser-use --session cloud cloud connect
-
-# Session 2: connect to user's Chrome
-browser-use --session chrome connect
-
-# Session 3: headed Chromium for debugging
-browser-use --session debug --headed open <url>
+BU_NAME=docs-preview browser-use <<'PY'
+new_tab("file:///absolute/path/to/preview.html")
+print(page_info())
+PY
 ```
 
-Each session is fully independent. The cloud session talks to a remote browser, the chrome session talks to the user's Chrome, and the debug session manages its own Chromium — all running simultaneously.
+A named local daemon is isolated at the harness state level, but it can still
+attach to the same running Chrome as another daemon. Keep one working tab per
+task, inspect `current_tab()` and `list_tabs()`, reuse it with `switch_tab()`, and
+never close tabs you did not create.
 
-## Listing and managing sessions
+## Remote isolation
+
+Use one Browser Use Cloud daemon per truly parallel task:
 
 ```bash
-browser-use sessions
+browser-use <<'PY'
+print(start_remote_daemon("scraper-a"))
+PY
+
+BU_NAME=scraper-a browser-use <<'PY'
+new_tab("https://example.com")
+print(page_info())
+PY
 ```
 
-Output:
-
-```
-SESSION          PHASE          PID      CONFIG
-cloud            running        12345    cloud
-chrome           running        12346    cdp
-debug            ready          12347    headed
-```
-
-PHASE shows the daemon lifecycle state: `initializing`, `ready`, `starting`, `running`, `shutting_down`, `stopped`, `failed`.
+Keep the same `BU_NAME` for all work on that remote browser. Remote daemons may
+continue billing until stopped. Ask the user before stopping a still-running
+remote browser, then use:
 
 ```bash
-browser-use --session cloud close           # close one session
-browser-use close --all                     # close every session
+browser-use <<'PY'
+stop_remote_daemon("scraper-a")
+PY
 ```
 
-## Common patterns
+## Cleanup
 
-**Cloud + local authenticated:**
-
-```bash
-browser-use --session scraper cloud connect
-browser-use --session scraper open https://example.com
-# ... scrape data ...
-
-browser-use --session auth --profile "Default" open https://github.com
-browser-use --session auth state
-# ... interact with authenticated site ...
-```
-
-**Throwaway test browser:**
-
-```bash
-APP_URL="<project-local-url>"
-browser-use --session test --headed open "$APP_URL"
-# ... test, debug, inspect ...
-browser-use --session test close    # done, clean up
-```
-
-**Environment variable:**
-
-```bash
-export BROWSER_USE_SESSION=work
-browser-use open <url>              # uses 'work' session without --session flag
-```
+There is no current `browser-use close`, `close --all`, or `sessions` command.
+Close only tabs created by the task with the documented tab helpers. Use
+`stop_remote_daemon(name)` for a Browser Use Cloud daemon. Use
+`browser-use --reload` only when intentionally restarting the local harness
+daemon, such as after a CLI code update; it is not normal per-task cleanup.

@@ -60,10 +60,12 @@ PI_THINKING_LEVELS = set(PI_THINKING_ORDER)
 PI_THINKING_RANK = {value: index for index, value in enumerate(PI_THINKING_ORDER)}
 CATALOG_THINKING_LEVELS = PI_THINKING_LEVELS
 CATALOG_INPUT_TYPES = {"text", "image", "video", "audio", "pdf"}
-REVIEW_TIER_RANK = {"basic": 1, "standard": 2, "strong": 3}
+REVIEW_TIER_RANK = {"basic": 1, "standard": 2, "strong": 3, "expert": 4}
 REVIEW_TIERS = set(REVIEW_TIER_RANK)
+REVIEW_COMPLEXITIES = {"simple", "complicated"}
 RESOURCE_STATUSES = {"live", "closed", "preserved"}
 READINESS_OVERFLOW_REASON = "derived deadline exceeds the supported timestamp range"
+PANE_READINESS_TIMEOUT = timedelta(seconds=300)
 MAX_UTC_TIMESTAMP = datetime.max.replace(tzinfo=timezone.utc)
 RUNTIME_STATUSES = {
     "not-started",
@@ -93,7 +95,6 @@ HARD_LIMITS = {
     "max_children_per_task": 6,
     "max_total_tasks": 18,
     "max_active_agents": 6,
-    "max_retries_per_task": 31,
 }
 GLOBAL_MODEL_CATALOG = (
     Path.home() / ".pi" / "agent" / "skills" / "model-routing-policy" / "models.json"
@@ -133,15 +134,14 @@ RUN_TRANSITIONS = {
 }
 SUPPORTED_EVENT_TYPES = (
     "set-run", "set-run-phase", "finish-reconciliation", "update-contract",
-    "replan-child", "add-todo", "set-todo", "add-child",
-    "rotate-child-capability", "record-model", "reserve-slot", "record-runtime",
+    "replan-child", "add-todo", "set-todo", "add-child", "record-model",
+    "reserve-slot", "record-runtime",
     "record-launch-verification", "record-productive-prompt",
     "record-usable-contribution", "release-slot", "fail-launch",
     "prepare-fallback", "add-runtime-intent", "record-pane-readiness",
     "bind-runtime-intent", "fail-runtime-intent", "settle-runtime-resource",
     "record-result", "accept-task", "set-task-status", "cancel-subtree",
-    "finalize-cancellation", "cancel-run", "update-integration",
-    "certify-integration", "complete-run",
+    "finalize-cancellation", "cancel-run", "update-integration", "complete-run",
 )
 DEPRECATED_EVENT_TYPES = {
     "add-runtime-resource": "record and bind a runtime intent instead",
@@ -217,6 +217,16 @@ def parse_time(value: Any, label: str) -> datetime:
     if parsed.tzinfo is None:
         fail(f"{label} must include a timezone")
     return parsed
+
+
+def valid_readiness_deadline(created_at: datetime, deadline_at: datetime) -> bool:
+    """Return whether a persisted pane-readiness deadline is safely anchored."""
+    overflow_sentinel = created_at == deadline_at == MAX_UTC_TIMESTAMP
+    return (
+        deadline_at >= created_at
+        and deadline_at - created_at <= PANE_READINESS_TIMEOUT
+        and (deadline_at != created_at or overflow_sentinel)
+    )
 
 
 def validate_readiness_probe_evidence(
@@ -308,19 +318,6 @@ def validate_readiness_probe_transition(previous_snapshot: Any, current_snapshot
     current = current_snapshot["result"]["process_info"]
     if previous["pane_id"] != current["pane_id"] or previous["shell_pid"] != current["shell_pid"]:
         fail("pane or shell identity changed between readiness probes")
-    shell_pid = previous["shell_pid"]
-    previous_extras = {
-        item["pid"]: item
-        for item in previous["foreground_processes"]
-        if item["pid"] != shell_pid
-    }
-    current_extras = {
-        item["pid"]: item
-        for item in current["foreground_processes"]
-        if item["pid"] != shell_pid
-    }
-    if any(previous_extras.get(pid) != item for pid, item in current_extras.items()):
-        fail("foreground work was added or replaced between readiness probes")
 
 
 def failed_attempt_resources(tasks: dict[str, Any], target: str, attempt: int) -> list[dict[str, Any]]:
@@ -362,10 +359,6 @@ def failed_attempt_resources(tasks: dict[str, Any], target: str, attempt: int) -
             if parent_tab is not None:
                 resources.append(parent_tab)
     return resources
-
-
-def token_hash(value: str) -> str:
-    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def file_digest(path: Path) -> str:
@@ -436,33 +429,6 @@ def state_directory(state: dict[str, Any]) -> Path:
     return Path(state["run"]["repo_root"]) / "var" / state["feature_name"] / "implement"
 
 
-def verify_artifact_digests(state: dict[str, Any], digests: Any) -> None:
-    if not isinstance(digests, dict) or not digests:
-        fail("certification requires artifact digests")
-    root = state_directory(state).resolve()
-    identities = set()
-    for relative, expected in digests.items():
-        if not nonempty(relative) or not valid_hash(expected):
-            fail("certification artifact digests are invalid")
-        lexical = root / relative
-        current = root
-        for part in Path(relative).parts:
-            current = current / part
-            if current.is_symlink():
-                fail("certification artifact paths cannot contain symbolic links")
-        candidate = lexical.resolve()
-        try:
-            candidate.relative_to(root)
-        except ValueError:
-            fail("certification artifact escapes the run folder")
-        if not candidate.is_file() or file_digest(candidate) != expected:
-            fail(f"certification artifact is missing or stale: {relative}")
-        identity = (candidate.stat().st_dev, candidate.stat().st_ino)
-        if identity in identities:
-            fail("certification artifacts must be distinct files")
-        identities.add(identity)
-
-
 def verify_task_output(state: dict[str, Any], runtime: dict[str, Any]) -> None:
     relative = runtime.get("output_path")
     digest = runtime.get("output_digest")
@@ -486,234 +452,438 @@ def verify_task_output(state: dict[str, Any], runtime: dict[str, Any]) -> None:
         fail("task output is missing or stale")
 
 
-def recompute_contract_preflight(
-    state: dict[str, Any], fingerprint: str, artifact_digests: dict[str, str]
-) -> tuple[str, str]:
-    contract_pack_path = "contract-review-pack.json"
-    contract_preflight_path = "evidence/contract-preflight.json"
-    if contract_pack_path not in artifact_digests or contract_preflight_path not in artifact_digests:
-        fail("certification requires contract pack and preflight artifacts")
-    root = state_directory(state)
+def review_report_file(state: dict[str, Any], relative: Any, label: str) -> Path:
+    if not nonempty(relative):
+        fail(f"{label} path is required")
+    repo_root = Path(state["run"]["repo_root"]).resolve()
+    feature_root = repo_root / "var" / state["feature_name"]
+    root = feature_root / "reviews"
+    candidate = repo_root / relative
     try:
-        pack = json.loads((root / contract_pack_path).read_text(encoding="utf-8"))
-        stored_preflight = json.loads((root / contract_preflight_path).read_text(encoding="utf-8"))
-        validator = Path(__file__).resolve().parents[2] / "agent-review" / "scripts" / "validate-contract-preflight.py"
-        environment = os.environ.copy()
-        environment["PYTHONDONTWRITEBYTECODE"] = "1"
-        recomputed_preflight = json.loads(
-            subprocess.check_output(
-                [
-                    sys.executable,
-                    str(validator),
-                    "--pack",
-                    str(root / contract_pack_path),
-                    "--repo-root",
-                    state["run"]["repo_root"],
-                    "--feature-name",
-                    state["feature_name"],
-                    "--fingerprint",
-                    fingerprint,
-                ],
-                text=True,
-                stderr=subprocess.STDOUT,
-                env=environment,
-            )
-        )
-    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as error:
-        fail(f"contract preflight cannot be recomputed: {error}")
-    if (
-        pack.get("featureName") != state["feature_name"]
-        or pack.get("reviewFingerprint") != fingerprint
-        or stored_preflight != recomputed_preflight
-        or recomputed_preflight.get("reviewFingerprint") != fingerprint
-        or (recomputed_preflight.get("pack") or {}).get("sha256") != artifact_digests[contract_pack_path]
-    ):
-        fail("contract pack or preflight is stale for the reviewed change")
-    return artifact_digests[contract_pack_path], artifact_digests[contract_preflight_path]
+        root.relative_to(repo_root)
+        candidate.relative_to(repo_root)
+    except ValueError:
+        fail(f"{label} must stay in the run reviews folder")
+    for path in (repo_root / "var", feature_root, root):
+        if path.is_symlink():
+            fail(f"{label} review folder cannot contain symbolic links")
+    current = repo_root
+    for part in candidate.relative_to(repo_root).parts:
+        current = current / part
+        if current.is_symlink():
+            fail(f"{label} path cannot contain symbolic links")
+    try:
+        candidate.resolve().relative_to(root.resolve())
+    except ValueError:
+        fail(f"{label} must stay in the run reviews folder")
+    if not candidate.is_file() or candidate.stat().st_size == 0:
+        fail(f"{label} is missing or empty")
+    return candidate
 
 
-def validate_final_contract(
-    state: dict[str, Any], fingerprint: str, artifact_digests: dict[str, str]
-) -> None:
-    integration = state["integration"]
-    for field in (
-        "review_target_fingerprint",
-        "review_wave_fingerprint",
-        "test_target_fingerprint",
-        "behavior_target_fingerprint",
-        "evidence_target_fingerprint",
-    ):
-        if integration.get(field) != fingerprint:
-            fail(f"{field} does not match the live fingerprint")
-    contract_pack_digest, contract_preflight_digest = recompute_contract_preflight(
-        state, fingerprint, artifact_digests
+def report_value(text: str, label: str) -> str | None:
+    matches = re.findall(
+        rf"(?im)^\s*{re.escape(label)}:\s*(.*?)\s*$", text
     )
-    if integration.get("test_verdict") == "skipped" and not nonempty(
-        integration.get("skipped_reason")
-    ):
-        fail("skipped tests require a reason")
-    if integration.get("test_verdict") == "pass":
-        test_evidence = integration.get("test_evidence", [])
-        if not test_evidence or any(
-            not posixpath.normpath(item.get("artifact", "")).startswith("evidence/")
-            or item.get("fingerprint") != fingerprint
-            for item in test_evidence
+    return matches[-1].strip() if matches else None
+
+
+def report_footer(text: str, label: str) -> dict[str, str]:
+    pattern = re.compile(
+        r"(?ms)^\s*Reviewer instance:\s*(.*?)\n"
+        r"\s*Model:\s*([^\n]+)\n"
+        r"\s*Thinking:\s*([^\n]+)\n"
+        r"\s*Finding IDs:\s*([^\n]+)\n"
+        r"\s*Verdict:\s*([^\n]+)$"
+    )
+    matches = list(pattern.finditer(text))
+    if not matches:
+        fail(f"{label} must end its response with the complete review footer")
+    match = matches[-1]
+    for line in text[match.end() :].splitlines():
+        stripped = line.strip()
+        if (
+            not stripped
+            or set(stripped) == {"─"}
+            or stripped.startswith(("~", "↑", "⌥"))
         ):
-            fail("passing tests require current digest-bound evidence-folder artifacts")
-    if integration.get("behavior_verdict") == "not-applicable":
-        if not nonempty(integration.get("behavior_reason")) or not isinstance(
-            integration.get("behavior_eligibility"), dict
+            continue
+        fail(f"{label} contains response text after its final footer")
+    return {
+        "reviewer_instance": "".join(
+            part.strip() for part in match.group(1).splitlines()
+        ),
+        "model": match.group(2).strip(),
+        "thinking": match.group(3).strip(),
+        "finding_ids": match.group(4).strip(),
+        "verdict": match.group(5).strip(),
+    }
+
+
+def summary_footer(text: str) -> dict[str, str]:
+    pattern = re.compile(
+        r"(?m)^Finding IDs:\s*([^\n]+)\nVerdict:\s*([^\n]+)$"
+    )
+    matches = list(pattern.finditer(text))
+    if not matches:
+        fail("review summary must end with Finding IDs and Verdict lines")
+    match = matches[-1]
+    if text[match.end() :].strip():
+        fail("review summary contains text after its final footer")
+    return {
+        "finding_ids": match.group(1).strip(),
+        "verdict": match.group(2).strip(),
+    }
+
+
+def report_finding_ids(raw: str, label: str) -> set[str]:
+    if not nonempty(raw):
+        fail(f"{label} must include a Finding IDs line")
+    if raw.strip().lower() in {"none", "clean", "n/a"}:
+        return set()
+    finding_ids = {item.strip() for item in raw.split(",") if item.strip()}
+    if not finding_ids:
+        fail(f"{label} has an invalid Finding IDs line")
+    return finding_ids
+
+
+def invalidate_review(integration: dict[str, Any]) -> None:
+    wave = integration.get("review_wave", 0)
+    if isinstance(wave, int) and not isinstance(wave, bool) and wave > 0:
+        integration["minimum_review_wave"] = max(
+            integration.get("minimum_review_wave", 0), wave + 1
+        )
+    integration.update(
+        {
+            "review_verdict": "pending",
+            "review_execution": None,
+            "review_perspectives": {},
+            "combined_report_path": None,
+        }
+    )
+
+
+def validate_review_resource_update(
+    previous_items: Any, supplied_items: Any, *, cleanup_only: bool
+) -> None:
+    if not isinstance(previous_items, list) or not isinstance(supplied_items, list):
+        fail("review resources must be lists")
+    previous = {
+        item.get("id"): item
+        for item in previous_items
+        if isinstance(item, dict) and nonempty(item.get("id"))
+    }
+    supplied = {
+        item.get("id"): item
+        for item in supplied_items
+        if isinstance(item, dict) and nonempty(item.get("id"))
+    }
+    if len(supplied) != len(supplied_items) or not set(previous).issubset(supplied):
+        fail("review resource updates cannot remove or duplicate recorded tabs")
+    if cleanup_only and set(supplied) != set(previous):
+        fail("review recovery cannot add new tab records")
+    for resource_id, item in supplied.items():
+        if item.get("kind") != "tab" or item.get("status") not in {"open", "closed"}:
+            fail("review resources require tab kind and open or closed status")
+        prior = previous.get(resource_id)
+        if prior is None and item.get("status") != "open":
+            fail("new review tabs must be recorded open before closure")
+        if prior is not None and prior.get("status") == "closed" and item.get("status") != "closed":
+            fail("closed review tabs cannot be reopened")
+
+
+def sibling_file_overlaps(state: dict[str, Any]) -> list[tuple[str, str, str]]:
+    owners: dict[tuple[str, str], list[str]] = {}
+    root_id = state["run"]["root_task_id"]
+    for task_id, task in state["tasks"].items():
+        if task_id == root_id or task.get("status") not in {"done", "cancelled"}:
+            continue
+        parent_id = task.get("parent_id")
+        for relative in task.get("result", {}).get("files_changed", []):
+            owners.setdefault((parent_id, relative), []).append(task_id)
+    overlaps: list[tuple[str, str, str]] = []
+    for (_, relative), task_ids in owners.items():
+        for left_index, left in enumerate(sorted(set(task_ids))):
+            for right in sorted(set(task_ids))[left_index + 1 :]:
+                overlaps.append((left, right, relative))
+    return overlaps
+
+
+def readable_evidence_path(state: dict[str, Any], value: str) -> bool:
+    requested = Path(value)
+    repo_root = Path(state["run"]["repo_root"]).resolve()
+    candidates = (
+        [requested]
+        if requested.is_absolute()
+        else [state_directory(state) / requested, repo_root / requested]
+    )
+    for candidate in candidates:
+        try:
+            candidate.resolve().relative_to(repo_root)
+        except ValueError:
+            continue
+        if (
+            candidate.is_file()
+            and not candidate.is_symlink()
+            and candidate.stat().st_size > 0
         ):
-            fail("not-applicable behavior verification requires documented eligibility")
-        allowed_extensions = {".md", ".txt", ".rst"}
+            return True
+    return False
+
+
+def require_readable_evidence(
+    state: dict[str, Any], entries: Any, label: str
+) -> None:
+    if not isinstance(entries, list) or not entries:
+        fail(f"{label} requires readable evidence")
+    description_fields = {"description", "evidence", "handoff", "result", "summary"}
+    path_prefixes = ("./", "../", "/", "evidence/", "outputs/", "var/")
+    for item in entries:
+        if nonempty(item):
+            no_whitespace = not any(character.isspace() for character in item)
+            looks_like_path = item.startswith(path_prefixes) or (
+                no_whitespace
+                and (bool(Path(item).suffix) or "/" in item or "\\" in item)
+            )
+            if not looks_like_path or readable_evidence_path(state, item):
+                continue
+            fail(f"{label} references a missing or empty evidence file")
+        if not isinstance(item, dict):
+            fail(f"{label} contains an unreadable evidence entry")
+        declared_references = [
+            item[key] for key in ("artifact", "path") if key in item
+        ]
+        if declared_references:
+            if all(
+                nonempty(value) and readable_evidence_path(state, value)
+                for value in declared_references
+            ):
+                continue
+            fail(f"{label} references a missing or empty evidence file")
+        if any(
+            key in description_fields and nonempty(value)
+            for key, value in item.items()
+        ):
+            continue
+        fail(f"{label} contains an unreadable evidence entry")
+
+
+def validate_integration_ready(state: dict[str, Any]) -> None:
+    integration = state["integration"]
+    test_verdict = integration.get("test_verdict")
+    if test_verdict not in {"pass", "skipped"}:
+        fail("checks must pass or have a documented skip")
+    if test_verdict == "pass":
+        require_readable_evidence(
+            state, integration.get("test_evidence"), "passing checks"
+        )
+    if test_verdict == "skipped" and not nonempty(integration.get("skipped_reason")):
+        fail("skipped checks require a reason")
+    behavior_verdict = integration.get("behavior_verdict")
+    if behavior_verdict not in {"pass", "user-pending", "not-applicable"}:
+        fail("behavior verification must be settled")
+    if behavior_verdict == "pass":
+        require_readable_evidence(
+            state,
+            integration.get("behavior_evidence"),
+            "passing behavior verification",
+        )
+    if behavior_verdict == "user-pending":
+        if not nonempty(integration.get("behavior_reason")):
+            fail("user-pending behavior requires a reason and readable handoff")
+        require_readable_evidence(
+            state,
+            integration.get("behavior_evidence"),
+            "user-pending behavior handoff",
+        )
+    if behavior_verdict == "not-applicable":
+        if (
+            not nonempty(integration.get("behavior_reason"))
+            or not isinstance(integration.get("behavior_eligibility"), dict)
+        ):
+            fail("inapplicable behavior verification requires documented eligibility")
+        allowed_extensions = {".md", ".rst", ".txt"}
         if not integration.get("changed_files") or any(
             Path(item).suffix.lower() not in allowed_extensions
             for item in integration["changed_files"]
         ):
             fail(
-                "not-applicable behavior verification is limited to documentation-only changes"
+                "inapplicable behavior verification is limited to documentation-only changes"
             )
-    if integration.get("behavior_verdict") == "user-pending":
-        handoffs = [
-            item
-            for item in integration.get("behavior_evidence", [])
-            if item.get("case_type") == "user-handoff"
-        ]
-        if (
-            not nonempty(integration.get("behavior_reason"))
-            or len(handoffs) != 1
-            or handoffs[0].get("fingerprint") != fingerprint
+
+    changed_files = sorted(integration.get("changed_files", []))
+    if run_owned_files(state) != changed_files:
+        fail("integration changed files do not match the live run-owned worktree delta")
+    root_id = state["run"]["root_task_id"]
+    root_files = sorted(state["tasks"][root_id].get("result", {}).get("files_changed", []))
+    if root_files != changed_files:
+        fail("root result files do not match the integrated changed files")
+
+    collisions = integration.get("collisions", [])
+    if any(item.get("status") != "resolved" for item in collisions):
+        fail("integration collisions remain unresolved")
+    for left, right, relative in sibling_file_overlaps(state):
+        if not any(
+            {left, right}.issubset(set(item.get("tasks", [])))
+            and relative in item.get("files", [])
+            for item in collisions
         ):
             fail(
-                "user-pending behavior verification requires one current manual-test handoff and a reason"
+                f"sibling file collision is not recorded: {left}, {right}, {relative}"
             )
+
+    if any(
+        item.get("status") == "open"
+        for item in integration.get("review_findings", [])
+    ):
+        fail("review findings remain open")
+    if any(
+        item.get("status") != "closed"
+        for item in integration.get("review_resources", [])
+    ):
+        fail("review resources remain open")
+
+    requirement = integration.get("review_requirement") or {}
+    execution = integration.get("review_execution")
+    if requirement.get("required") is False:
+        if (
+            requirement.get("classification") != "simple"
+            or requirement.get("source") != "automatic"
+            or execution != "not-required"
+            or integration.get("review_verdict") != "not-required"
+            or integration.get("review_perspectives")
+            or integration.get("combined_report_path")
+        ):
+            fail("a skipped review must be an evidenced automatic simple change")
+        return
+
+    if (
+        requirement.get("required") is not True
+        or execution != "independent"
+        or integration.get("review_verdict") != "pass"
+    ):
+        fail("required independent review is incomplete")
     wave = integration.get("review_wave")
     if isinstance(wave, bool) or not isinstance(wave, int) or wave < 1:
-        fail("review wave must be a positive integer")
-    waves = integration.get("review_waves", [])
-    if not waves or wave != waves[-1].get("wave"):
-        fail("review_wave must be the newest appended wave")
-    wave_record = next((item for item in waves if item.get("wave") == wave), None)
-    if (
-        not isinstance(wave_record, dict)
-        or wave_record.get("fingerprint") != fingerprint
-        or wave_record.get("status") != "complete"
-    ):
-        fail("current review wave is missing or stale")
-    wave_started = parse_time(wave_record.get("started_at"), "review wave started_at")
-    findings = integration.get("review_findings", [])
-    structured_ids = {item["id"] for item in findings}
-    report_ids = set()
-    root = state_directory(state)
-    perspectives = integration.get("review_perspectives", {})
-    expected_review_paths = {
-        "correctness_safety": f"reviews/wave-{wave}-correctness.md",
-        "architecture_integration": f"reviews/wave-{wave}-architecture.md",
-        "regression_fix_quality": f"reviews/wave-{wave}-regression.md",
+        fail("independent review requires a positive wave number")
+    minimum_wave = integration.get("minimum_review_wave", 0)
+    if wave < minimum_wave:
+        fail("independent review must use a fresh wave after rework")
+    expected = {
+        "correctness_safety": f"var/{state['feature_name']}/reviews/wave-{wave}-correctness.md",
+        "architecture_integration": f"var/{state['feature_name']}/reviews/wave-{wave}-architecture.md",
+        "regression_fix_quality": f"var/{state['feature_name']}/reviews/wave-{wave}-regression.md",
     }
-    for name in (
-        "correctness_safety",
-        "architecture_integration",
-        "regression_fix_quality",
-    ):
-        item = perspectives.get(name) or {}
-        if (
-            item.get("status") != "complete"
-            or not nonempty(item.get("agent_id"))
-            or not nonempty(item.get("agent_instance_id"))
-        ):
-            fail(f"{name} reviewer provenance is incomplete")
-        if parse_time(item.get("started_at"), f"{name} started_at") < wave_started:
-            fail(f"{name} predates the current review wave")
-        parse_time(item.get("deadline_at"), f"{name} deadline_at")
-        relative = item.get("output_path")
-        if relative != expected_review_paths[name]:
-            fail(f"{name} report is outside its expected current-wave location")
-        if relative not in artifact_digests:
-            fail(f"{name} report digest is missing")
-        text = (root / relative).read_text(encoding="utf-8")
-        for marker in (
-            f"Fingerprint: {fingerprint}",
-            f"Review wave: {wave}",
-            f"Reviewer: {item['agent_id']}",
-            f"Contract pack: {contract_pack_digest}",
-            f"Contract preflight: {contract_preflight_digest}",
-        ):
-            label = marker.split(":", 1)[0] + ":"
-            if [line for line in text.splitlines() if line.startswith(label)] != [marker]:
-                fail(f"{name} report requires exactly one marker line: {marker}")
-        finding_lines = [
-            value for value in text.splitlines() if value.startswith("Finding IDs:")
+    perspectives = integration.get("review_perspectives") or {}
+    if set(perspectives) != set(expected):
+        fail("independent review requires correctness, architecture, and regression reports")
+
+    forbidden_instances = {
+        value
+        for value in [
+            state["run"].get("coordinator_instance_id"),
+            *state["run"].get("coordinator_instance_history", []),
         ]
-        if len(finding_lines) != 1 or not finding_lines[0].startswith("Finding IDs: "):
-            fail(f"{name} report requires exactly one Finding IDs marker line")
-        line = finding_lines[0]
-        raw = line.split(":", 1)[1].strip()
-        if raw.lower() != "none":
-            values = [value.strip() for value in raw.split(",")]
-            if not values or any(not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value) for value in values):
-                fail(f"{name} Finding IDs marker is empty or malformed")
-            report_ids.update(values)
-    if report_ids != structured_ids or any(
-        item.get("status") == "open" for item in findings
-    ):
-        fail(
-            "review report findings and structured findings do not match or remain open"
-        )
-    combined = integration.get("combined_report_path")
-    if combined != f"reviews/wave-{wave}-combined.md":
-        fail("combined review report is outside its expected current-wave location")
-    if combined not in artifact_digests:
-        fail("combined review report digest is missing")
-    combined_text = (root / combined).read_text(encoding="utf-8")
-    for marker in (
-        f"Fingerprint: {fingerprint}",
-        f"Review wave: {wave}",
-        f"Contract pack: {contract_pack_digest}",
-        f"Contract preflight: {contract_preflight_digest}",
-    ):
-        label = marker.split(":", 1)[0] + ":"
-        if [line for line in combined_text.splitlines() if line.startswith(label)] != [marker]:
-            fail(f"combined review report requires exactly one marker line: {marker}")
-    expected_evidence = f"var/{state['feature_name']}/implement/evidence-index.md"
-    if (
-        integration.get("evidence_index") != expected_evidence
-        or "evidence-index.md" not in artifact_digests
-    ):
-        fail("evidence index is missing or outside the run")
-
-
-def live_review_fingerprint(state: dict[str, Any]) -> str:
-    scope = state["integration"].get("review_scope") or {}
-    script = (
-        Path(__file__).resolve().parents[2]
-        / "agent-review"
-        / "scripts"
-        / "review-fingerprint.sh"
+        if nonempty(value)
+    }
+    for task in state["tasks"].values():
+        runtime = task.get("runtime") or {}
+        if nonempty(runtime.get("agent_instance_id")):
+            forbidden_instances.add(runtime["agent_instance_id"])
+        for attempt in task.get("runtime_history", []):
+            historical = attempt.get("runtime") or {}
+            if nonempty(historical.get("agent_instance_id")):
+                forbidden_instances.add(historical["agent_instance_id"])
+    review_root = (
+        Path(state["run"]["repo_root"])
+        / "var"
+        / state["feature_name"]
+        / "reviews"
     )
-    command = [
-        "bash",
-        str(script),
-        "--base",
-        str(scope.get("base_sha")),
-        "--target",
-        str(scope.get("target_ref")),
-        "--format",
-        "json",
-    ]
-    for item in scope.get("paths") or []:
-        command.extend(["--scope", item])
-    try:
-        return json.loads(
-            subprocess.check_output(command, cwd=state["run"]["repo_root"], text=True)
-        )["fingerprint"]
-    except (
-        subprocess.CalledProcessError,
-        json.JSONDecodeError,
-        KeyError,
-        OSError,
-    ) as error:
-        fail(f"could not calculate live review fingerprint: {error}")
+    legacy_review_root = state_directory(state) / "reviews"
+    available_waves = []
+    for root in (review_root, legacy_review_root):
+        for prior in root.glob("wave-*-*.md"):
+            match = re.match(r"wave-(\d+)-", prior.name)
+            if match:
+                available_waves.append(int(match.group(1)))
+            if f"wave-{wave}-" in prior.name:
+                continue
+            try:
+                prior_footer = report_footer(
+                    prior.read_text(encoding="utf-8"), "prior review report"
+                )
+            except SystemExit:
+                continue
+            forbidden_instances.add(prior_footer["reviewer_instance"])
+    if available_waves and wave != max(available_waves):
+        fail("independent review must use the newest readable wave")
+    for legacy_wave in integration.get("review_waves", []):
+        if isinstance(legacy_wave, dict) and legacy_wave.get("wave") != wave:
+            forbidden_instances.update(
+                item
+                for item in legacy_wave.get("reviewer_instance_ids", [])
+                if nonempty(item)
+            )
+
+    findings = {
+        item["id"]: item
+        for item in integration.get("review_findings", [])
+        if isinstance(item, dict) and nonempty(item.get("id"))
+    }
+    reviewer_instances = []
+    for name, relative in expected.items():
+        item = perspectives[name]
+        if item.get("status") != "complete" or item.get("output_path") != relative:
+            fail(f"{name} review is incomplete")
+        for field in (
+            "agent_id",
+            "agent_instance_id",
+            "provider",
+            "model_id",
+            "thinking_level",
+        ):
+            if not nonempty(item.get(field)):
+                fail(f"{name} review is missing {field}")
+        reviewer_instances.append(item["agent_instance_id"])
+        text = review_report_file(state, relative, f"{name} report").read_text(
+            encoding="utf-8"
+        )
+        footer = report_footer(text, f"{name} report")
+        if footer["reviewer_instance"] != item["agent_instance_id"]:
+            fail(f"{name} report reviewer identity does not match integration state")
+        if footer["model"] != f"{item['provider']}/{item['model_id']}":
+            fail(f"{name} report model does not match integration state")
+        if footer["thinking"] != item["thinking_level"]:
+            fail(f"{name} report thinking does not match integration state")
+        if footer["verdict"].lower() not in {"clean", "pass"}:
+            fail(f"{name} report is not clean")
+        for finding_id in report_finding_ids(
+            footer["finding_ids"], f"{name} report"
+        ):
+            finding = findings.get(finding_id)
+            if finding is None or finding.get("status") == "open":
+                fail(f"{name} report finding {finding_id} is not closed in integration state")
+    if len(set(reviewer_instances)) != 3:
+        fail("independent reviewers must use three distinct Pi sessions")
+    if any(instance in forbidden_instances for instance in reviewer_instances):
+        fail("final reviewers must be fresh and independent from coordinators and contributors")
+
+    summary = f"var/{state['feature_name']}/reviews/wave-{wave}-summary.md"
+    if integration.get("combined_report_path") != summary:
+        fail("review summary path does not match the current wave")
+    summary_text = review_report_file(state, summary, "review summary").read_text(
+        encoding="utf-8"
+    )
+    footer = summary_footer(summary_text)
+    if footer["verdict"].lower() not in {"clean", "pass"}:
+        fail("review summary is not clean")
+    for finding_id in report_finding_ids(
+        footer["finding_ids"], "review summary"
+    ):
+        finding = findings.get(finding_id)
+        if finding is None or finding.get("status") == "open":
+            fail(f"review summary finding {finding_id} is not closed")
 
 
 def valid_hash(value: Any) -> bool:
@@ -839,16 +1009,16 @@ def validate_model_selection(
             if (
                 not isinstance(escalation, dict)
                 or set(escalation) != {"status", "rule", "baselines"}
-                or escalation.get("status") != "stronger"
+                or (escalation.get("status"), escalation.get("rule"))
+                not in {
+                    (
+                        "stronger",
+                        "no-regression-in-model-or-thinking-and-at-least-one-strict",
+                    ),
+                    ("peer", "simple-review-fresh-peer"),
+                }
             ):
-                fail(
-                    "review model selection requires canonical stronger reviewer_escalation"
-                )
-            if (
-                escalation.get("rule")
-                != "no-regression-in-model-or-thinking-and-at-least-one-strict"
-            ):
-                fail("review model selection uses an unsupported escalation rule")
+                fail("review model selection uses unsupported reviewer escalation")
             baselines = escalation.get("baselines")
             if (
                 not isinstance(baselines, list)
@@ -984,13 +1154,31 @@ def validate_versioned_catalog(data: Any) -> dict[str, Any]:
         ):
             fail(f"{label} thinking metadata is invalid")
         routing = item.get("routing")
+        allowed_routing_fields = {
+            "reviewTier",
+            "delegation",
+            "reviewComplexities",
+            "reviewThinking",
+        }
+        review_complexities = routing.get("reviewComplexities", []) if isinstance(routing, dict) else []
+        minimum_review_thinking = routing.get("reviewThinking", {}) if isinstance(routing, dict) else {}
         if (
             not isinstance(routing, dict)
-            or set(routing) != {"reviewTier"}
+            or not {"reviewTier"}.issubset(routing)
+            or not set(routing).issubset(allowed_routing_fields)
             or routing.get("reviewTier") not in REVIEW_TIERS
+            or routing.get("delegation", "baseline-only") not in {
+                "routine", "review-or-exceptional-debugging", "exceptional-debugging", "baseline-only"
+            }
+            or not isinstance(review_complexities, list)
+            or len(review_complexities) != len(set(review_complexities))
+            or any(value not in REVIEW_COMPLEXITIES for value in review_complexities)
+            or not isinstance(minimum_review_thinking, dict)
+            or not set(minimum_review_thinking).issubset(set(review_complexities))
+            or any(value not in levels for value in minimum_review_thinking.values())
         ):
             fail(
-                f"{label}.routing must contain only a basic, standard, or strong reviewTier"
+                f"{label}.routing requires valid review, delegation, and review-complexity metadata"
             )
     return {
         "schema_version": schema_version,
@@ -1073,38 +1261,31 @@ def validate_resolution_artifact(
         or payload_catalog.get("catalogVersion") != catalog.get("catalog_version")
     ):
         fail("model resolution artifact does not match the bound Pi-global catalog")
-    policy_version = payload.get("policyVersion")
     request = payload.get("request") or {}
-    if policy_version == 3:
-        if "excludedModels" in request or "fallbackFrom" in request:
-            fail("legacy model resolution artifact contains unsupported fallback provenance")
-    elif policy_version == 5:
-        excluded = request.get("excludedModels")
-        fallback = request.get("fallbackFrom")
-        if (
-            not isinstance(excluded, list)
-            or len(excluded) != len(set(excluded))
-            or (fallback is None and excluded)
-            or (fallback is not None and not excluded)
-        ):
-            fail("model resolution artifact has invalid fallback provenance")
-        if fallback is not None:
-            if not isinstance(fallback, dict) or set(fallback) != {
-                "previousResolution",
-                "failureEvidence",
-                "cleanupEvidence",
-            }:
-                fail("model resolution artifact has malformed fallback provenance")
-            for value in fallback.values():
-                if (
-                    not isinstance(value, dict)
-                    or set(value) != {"path", "digest"}
-                    or not nonempty(value.get("path"))
-                    or not valid_hash(value.get("digest"))
-                ):
-                    fail("model resolution artifact has incomplete fallback provenance")
-    else:
-        fail("model resolution artifact uses an unsupported routing policy version")
+    excluded = request.get("excludedModels", [])
+    fallback = request.get("fallbackFrom")
+    if (
+        not isinstance(excluded, list)
+        or len(excluded) != len(set(excluded))
+        or (fallback is None and excluded)
+        or (fallback is not None and not excluded)
+    ):
+        fail("model resolution artifact has invalid fallback provenance")
+    if fallback is not None:
+        if not isinstance(fallback, dict) or set(fallback) != {
+            "previousResolution",
+            "failureEvidence",
+            "cleanupEvidence",
+        }:
+            fail("model resolution artifact has malformed fallback provenance")
+        for value in fallback.values():
+            if (
+                not isinstance(value, dict)
+                or set(value) != {"path", "digest"}
+                or not nonempty(value.get("path"))
+                or not valid_hash(value.get("digest"))
+            ):
+                fail("model resolution artifact has incomplete fallback provenance")
     return {"path": path, "digest": digest}
 
 
@@ -1146,9 +1327,20 @@ def validate_fallback_evidence(
         "selectionMode",
         "userModel",
         "userModelAuthority",
+        "exceptionalDebuggingReason",
+        "reviewComplexity",
     }
+    def routing_zone_value(value: dict[str, Any], key: str) -> Any:
+        if key == "reviewComplexity" and value.get("taskClass") == "review":
+            return value.get(key, "complicated")
+        return value.get(key)
+
     if (
-        any(request.get(key) != previous_request.get(key) for key in zone_keys)
+        any(
+            routing_zone_value(request, key)
+            != routing_zone_value(previous_request, key)
+            for key in zone_keys
+        )
         or payload.get("caller") != previous_payload.get("caller")
     ):
         fail("fallback resolution changes the task's routing zone or caller baseline")
@@ -1387,137 +1579,6 @@ def argv_value(argv: Any, flag: str) -> str:
     return argv[positions[0] + 1]
 
 
-def validate_review_perspective_proof(
-    state: dict[str, Any], perspective: dict[str, Any]
-) -> None:
-    selection_artifact = perspective.get("resolution_artifact")
-    _, selection_digest, resolution = read_run_artifact(
-        state, selection_artifact, "review resolution artifact"
-    )
-    selection = validate_model_selection(
-        resolution.get("stateSelection"), "review", require_thinking=True
-    )
-    if (
-        validate_resolution_artifact(state, selection_artifact, selection)
-        != selection_artifact
-    ):
-        fail("review resolution artifact is not normalized")
-    expected = {
-        "provider": selection["provider"],
-        "model": selection["model_id"],
-        "thinking": selection["thinking_level"],
-    }
-    if expected != {
-        "provider": perspective.get("provider"),
-        "model": perspective.get("model_id"),
-        "thinking": perspective.get("thinking_level"),
-    }:
-        fail("review perspective model does not match its resolution")
-
-    start_artifact = perspective.get("start_response_artifact")
-    _, start_digest, start = read_run_artifact(
-        state, start_artifact, "review start response artifact"
-    )
-    start_result = start.get("result") or {}
-    start_agent = start_result.get("agent") or {}
-    start_session = (start_agent.get("agent_session") or {}).get("value")
-    argv = start_result.get("argv")
-    if (
-        start.get("id") != "cli:agent:start"
-        or argv != ["pi", *(resolution.get("piArgs") or [])]
-        or start_result.get("type") != "agent_started"
-        or not isinstance(argv, list)
-        or not argv
-        or argv[0] != "pi"
-        or start_agent.get("agent") != "pi"
-        or start_agent.get("agent_status") != "idle"
-        or start_agent.get("interactive_ready") is not True
-        or start_agent.get("name") != perspective.get("agent_id")
-        or start_session != perspective.get("agent_instance_id")
-        or argv_value(argv, "--provider") != expected["provider"]
-        or argv_value(argv, "--model") != expected["model"]
-        or argv_value(argv, "--thinking") != expected["thinking"]
-    ):
-        fail(
-            "review perspective start response does not prove the resolved Herdr Pi agent"
-        )
-
-    verification_artifact = perspective.get("verification_artifact")
-    _, _, verification = read_run_artifact(
-        state, verification_artifact, "review launch verification artifact"
-    )
-    verification_evidence = verification.get("evidence") or {}
-    if (
-        verification.get("verified") is not True
-        or verification.get("expected") != expected
-        or (verification_evidence.get("catalog") or {}).get("digest")
-        != (state["run"].get("model_catalog") or {}).get("digest")
-        or (verification_evidence.get("resolutionArtifact") or {}).get("digest")
-        != selection_digest
-        or (verification_evidence.get("startResponseArtifact") or {}).get("digest")
-        != start_digest
-        or verification_evidence.get("sessionIdentity")
-        != perspective.get("agent_instance_id")
-    ):
-        fail(
-            "review perspective launch verification does not match its preserved proof"
-        )
-
-    catalog_models = {
-        (item["provider"], item["modelId"]): item
-        for item in (state["run"].get("model_catalog") or {}).get("models", [])
-    }
-    selected_entry = catalog_models.get((selection["provider"], selection["model_id"]))
-    if not isinstance(selected_entry, dict):
-        fail("review perspective selected model is outside the bound catalog")
-    baselines = selection["reviewer_escalation"]["baselines"]
-    baseline_quality = 0
-    baseline_thinking = 0
-    for baseline in baselines:
-        entry = catalog_models.get((baseline["provider"], baseline["model_id"]))
-        if not isinstance(entry, dict):
-            fail("review perspective baseline is outside the bound catalog")
-        baseline_quality = max(
-            baseline_quality, REVIEW_TIER_RANK[entry["routing"]["reviewTier"]]
-        )
-        baseline_thinking = max(
-            baseline_thinking, PI_THINKING_RANK[baseline["thinking_level"]]
-        )
-    selected_quality = REVIEW_TIER_RANK[selected_entry["routing"]["reviewTier"]]
-    selected_thinking = PI_THINKING_RANK[selection["thinking_level"]]
-    if (
-        selected_quality < baseline_quality
-        or selected_thinking < baseline_thinking
-        or (
-            selected_quality == baseline_quality
-            and selected_thinking == baseline_thinking
-        )
-    ):
-        fail("review perspective is not strictly stronger than its baselines")
-
-    contributors = [
-        state["run"]["coordinator_model"],
-        *state["run"].get("coordinator_model_history", []),
-        *[
-            task["model_selection"]
-            for task in state["tasks"].values()
-            if task.get("model_selection")
-            and (
-                task["runtime"].get("productive_prompt")
-                or task["result"].get("files_changed")
-            )
-        ],
-    ]
-    for contributor in contributors:
-        if not any(
-            baseline["provider"] == contributor["provider"]
-            and baseline["model_id"] == contributor["model_id"]
-            and baseline["thinking_level"] == contributor["thinking_level"]
-            for baseline in baselines
-        ):
-            fail("review perspective baselines omit an implementation contributor")
-
-
 def require_live_catalog(state: dict[str, Any]) -> None:
     catalog = state["run"].get("model_catalog")
     if not isinstance(catalog, dict):
@@ -1610,8 +1671,6 @@ def task_template(
     dependencies = string_list(event.get("dependencies", []), "dependencies")
     return {
         "id": task_id,
-        "capability_hash": event.get("capability_hash"),
-        "capability_hash_history": [],
         "parent_id": parent_id,
         "root_id": root_id,
         "depth": depth,
@@ -1835,12 +1894,6 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
     for task_id, task in tasks.items():
         if not TASK_ID_RE.fullmatch(task_id) or task.get("id") != task_id:
             fail(f"invalid task ID or key: {task_id}")
-        if not valid_hash(task.get("capability_hash")):
-            fail(f"task {task_id} has an invalid capability hash")
-        if not isinstance(task.get("capability_hash_history"), list) or any(
-            not valid_hash(item) for item in task["capability_hash_history"]
-        ):
-            fail(f"task {task_id} has invalid capability history")
         parent_id = task.get("parent_id")
         depth = task.get("depth")
         if task_id == root_id:
@@ -1860,13 +1913,8 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
         if task.get("status") not in TASK_STATUSES:
             fail(f"task {task_id} has invalid status")
         attempts = task.get("attempts")
-        max_attempts = limits["max_retries_per_task"] + 1
-        if (
-            isinstance(attempts, bool)
-            or not isinstance(attempts, int)
-            or not 0 <= attempts <= max_attempts
-        ):
-            fail(f"task {task_id} attempts must be between 0 and {max_attempts}")
+        if isinstance(attempts, bool) or not isinstance(attempts, int) or attempts < 0:
+            fail(f"task {task_id} attempts must be a non-negative integer")
         if task.get("phase") != TASK_PHASES[task["status"]]:
             fail(f"task {task_id} has an invalid status/phase pair")
         if task.get("task_class") not in TASK_CLASSES:
@@ -2145,6 +2193,16 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
                 state, task.get("model_resolution"), model
             ) != task.get("model_resolution"):
                 fail(f"task {task_id} model resolution artifact is not normalized")
+            recorded_review_complexity = None
+            if task["task_class"] == "review":
+                _, _, task_resolution = read_run_artifact(
+                    state, task.get("model_resolution"), "task model resolution"
+                )
+                recorded_review_complexity = (
+                    task_resolution.get("request") or {}
+                ).get("reviewComplexity", "complicated")
+                if recorded_review_complexity not in {"simple", "complicated"}:
+                    fail(f"task {task_id} review complexity is invalid")
             active_model = task.get("active_model")
             if (
                 not isinstance(active_model, dict)
@@ -2236,8 +2294,29 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
                     selected_entry = catalog_models_by_ref[
                         (model["provider"], model["model_id"])
                     ]
+                    expected_review_complexity = recorded_review_complexity
+                    expected_escalation = (
+                        "peer"
+                        if expected_review_complexity == "simple"
+                        else "stronger"
+                    )
+                    if escalation.get("status") != expected_escalation:
+                        fail(
+                            f"task {task_id} review escalation does not match its recorded complexity"
+                        )
+                    selected_routing = selected_entry["routing"]
+                    review_complexities = selected_routing.get("reviewComplexities")
+                    review_thinking = selected_routing.get("reviewThinking")
+                    if review_complexities is not None and (
+                        expected_review_complexity not in review_complexities
+                        or (review_thinking or {}).get(expected_review_complexity)
+                        != model["thinking_level"]
+                    ):
+                        fail(
+                            f"task {task_id} reviewer violates its catalog review routing"
+                        )
                     selected_quality = REVIEW_TIER_RANK[
-                        selected_entry["routing"]["reviewTier"]
+                        selected_routing["reviewTier"]
                     ]
                     selected_thinking = PI_THINKING_RANK[model["thinking_level"]]
                     non_regressive = (
@@ -2248,7 +2327,10 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
                         selected_quality > baseline_quality
                         or selected_thinking > baseline_thinking
                     )
-                    if not non_regressive or not strictly_higher:
+                    if not non_regressive or (
+                        expected_review_complexity == "complicated"
+                        and not strictly_higher
+                    ):
                         fail(
                             f"task {task_id} reviewer does not satisfy its recorded escalation"
                         )
@@ -2366,11 +2448,7 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
                     created_at = parse_time(readiness["created_at"], "pane readiness created_at")
                     deadline_at = parse_time(readiness["deadline_at"], "pane readiness deadline_at")
                     overflow_sentinel = created_at == deadline_at == MAX_UTC_TIMESTAMP
-                    if (
-                        deadline_at < created_at
-                        or deadline_at - created_at > timedelta(seconds=30)
-                        or (deadline_at == created_at and not overflow_sentinel)
-                    ):
+                    if not valid_readiness_deadline(created_at, deadline_at):
                         fail(f"agent intent {intent_id} has an invalid readiness deadline")
                     overflow_probe = False
                     terminal_probe_seen = False
@@ -2605,43 +2683,57 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
         or not nonempty(eligibility.get("evidence"))
     ):
         fail("behavior eligibility must document a documentation-only classification")
-    if integration.get("review_verdict") not in {"pending", "pass", "fail", "blocked"}:
+    if integration.get("review_verdict") not in {"pending", "pass", "not-required", "fail", "blocked"}:
         fail("integration.review_verdict is invalid")
-    if integration.get("review_execution") not in {None, "independent"}:
-        fail("integration.review_execution must be independent")
-    if integration.get("review_scope") is not None and not isinstance(
-        integration.get("review_scope"), dict
+    if integration.get("review_execution") not in {None, "independent", "not-required"}:
+        fail("integration.review_execution must be independent or not-required")
+    review_requirement = integration.get("review_requirement")
+    if review_requirement is not None and (
+        not isinstance(review_requirement, dict)
+        or review_requirement.get("classification") not in {"simple", "complicated", "feature"}
+        or review_requirement.get("source") not in {"automatic", "user-request"}
+        or review_requirement.get("required")
+        != (
+            review_requirement.get("classification") != "simple"
+            or review_requirement.get("source") == "user-request"
+        )
+        or not nonempty(review_requirement.get("reason"))
     ):
-        fail("integration.review_scope must be an object")
-    if not isinstance(integration.get("review_waves"), list) or any(
-        not isinstance(item, dict) for item in integration["review_waves"]
-    ):
-        fail("integration.review_waves must be a list of objects")
-    wave_numbers = [item.get("wave") for item in integration["review_waves"]]
-    if any(
-        isinstance(item, bool) or not isinstance(item, int) or item < 1
-        for item in wave_numbers
-    ) or wave_numbers != sorted(set(wave_numbers)):
-        fail("integration review waves must be unique and increasing")
+        fail("integration.review_requirement is invalid")
     if not isinstance(integration.get("review_perspectives"), dict) or any(
-        not isinstance(item, dict)
-        for item in integration["review_perspectives"].values()
+        not isinstance(item, dict) for item in integration["review_perspectives"].values()
     ):
         fail("integration.review_perspectives must be an object of objects")
+    minimum_review_wave = integration.get("minimum_review_wave", 0)
+    if (
+        isinstance(minimum_review_wave, bool)
+        or not isinstance(minimum_review_wave, int)
+        or minimum_review_wave < 0
+    ):
+        fail("integration.minimum_review_wave must be a non-negative integer")
+    review_resources = integration.get("review_resources", [])
+    if not isinstance(review_resources, list):
+        fail("integration.review_resources must be a list")
+    review_resource_ids = set()
+    for resource in review_resources:
+        if (
+            not isinstance(resource, dict)
+            or resource.get("kind") != "tab"
+            or not nonempty(resource.get("id"))
+            or resource["id"] in review_resource_ids
+            or resource.get("status") not in {"open", "closed"}
+        ):
+            fail("review resources require unique tab IDs and open or closed status")
+        review_resource_ids.add(resource["id"])
     changed_files = integration.get("changed_files")
     collisions = integration.get("collisions")
     validate_repo_files(changed_files, "integration.changed_files")
     if not isinstance(collisions, list):
         fail("integration.collisions must be a list")
     for collision in collisions:
-        if not isinstance(collision, dict) or collision.get("status") not in {
-            "open",
-            "resolved",
-        }:
+        if not isinstance(collision, dict) or collision.get("status") not in {"open", "resolved"}:
             fail("each integration collision needs open or resolved status")
-        if not isinstance(collision.get("tasks"), list) or not isinstance(
-            collision.get("files"), list
-        ):
+        if not isinstance(collision.get("tasks"), list) or not isinstance(collision.get("files"), list):
             fail("collision entries require task and file lists")
         if collision.get("status") == "resolved" and (
             not nonempty(collision.get("resolution"))
@@ -2649,30 +2741,10 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
             or not collision["rerun_evidence"]
         ):
             fail("resolved collisions require a resolution and rerun evidence")
-    test_evidence = integration.get("test_evidence")
-    if not isinstance(test_evidence, list):
+    if not isinstance(integration.get("test_evidence"), list):
         fail("integration.test_evidence must be a list")
-    for item in test_evidence:
-        if (
-            not isinstance(item, dict)
-            or not nonempty(item.get("artifact"))
-            or not nonempty(item.get("fingerprint"))
-            or not nonempty(item.get("summary"))
-        ):
-            fail("test evidence entries require artifact, fingerprint, and summary")
-    behavior_evidence = integration.get("behavior_evidence")
-    if not isinstance(behavior_evidence, list):
+    if not isinstance(integration.get("behavior_evidence"), list):
         fail("integration.behavior_evidence must be a list")
-    for item in behavior_evidence:
-        if (
-            not isinstance(item, dict)
-            or item.get("case_type") not in {"happy", "error", "edge", "user-handoff"}
-            or not nonempty(item.get("artifact"))
-            or not nonempty(item.get("fingerprint"))
-        ):
-            fail(
-                "behavior evidence entries require case_type, artifact, and fingerprint"
-            )
     review_findings = integration.get("review_findings")
     if not isinstance(review_findings, list):
         fail("integration.review_findings must be a list")
@@ -2687,35 +2759,25 @@ def validate(state: dict[str, Any], state_path: Path | None = None) -> None:
         ):
             fail("review findings require unique IDs, severity, and valid status")
         finding_ids.add(finding_id)
-        if finding.get("status") in {"resolved", "rejected"} and not nonempty(
-            finding.get("resolution")
-        ):
+        if finding.get("status") in {"resolved", "rejected"} and not nonempty(finding.get("resolution")):
             fail(f"review finding {finding_id} requires a resolution")
-    certification = integration.get("certification")
-    if certification is not None:
-        if (
-            not isinstance(certification, dict)
-            or not nonempty(certification.get("fingerprint"))
-            or not isinstance(certification.get("revision"), int)
-        ):
-            fail("integration certification is invalid")
     if run.get("status") == "complete":
         if tasks[root_id]["status"] != "done":
             fail("a complete run requires a done root task")
         if (
-            integration.get("review_verdict") != "pass"
+            not (
+                integration.get("review_verdict") == "pass"
+                and integration.get("review_execution") == "independent"
+                or integration.get("review_verdict") == "not-required"
+                and integration.get("review_execution") == "not-required"
+            )
             or integration.get("test_verdict") not in {"pass", "skipped"}
             or integration.get("behavior_verdict")
             not in {"pass", "user-pending", "not-applicable"}
         ):
             fail(
-                "a complete run requires checks, a settled behavior handoff, and a passing review"
+                "a complete run requires checks, a settled behavior handoff, and a settled review decision"
             )
-        if (
-            not isinstance(integration.get("certification"), dict)
-            or integration["certification"].get("revision") != state["revision"] - 1
-        ):
-            fail("a complete run requires a current final integration certification")
         if slots or any(
             task["status"] not in SETTLED
             for task_id, task in tasks.items()
@@ -2734,7 +2796,6 @@ def apply_event(
     state: dict[str, Any],
     state_path: Path,
     actor: str,
-    capability: str,
     lease_id: str | None,
     event: dict[str, Any],
 ) -> dict[str, Any]:
@@ -2742,10 +2803,6 @@ def apply_event(
     tasks = state["tasks"]
     if not isinstance(actor, str) or actor not in tasks:
         fail(f"unknown actor task: {actor!r}")
-    if not nonempty(capability) or not secrets.compare_digest(
-        tasks[actor]["capability_hash"], token_hash(capability)
-    ):
-        fail("task capability does not match the actor")
     event_type = event.get("type")
     if not nonempty(event_type):
         fail("event type must be a non-empty string")
@@ -2756,16 +2813,24 @@ def apply_event(
         suggestion = f" Did you mean {matches[0]!r}?" if matches else ""
         fail(f"unsupported event type: {event_type!r}.{suggestion} Run the documented 'events' command for supported names and bootstrap examples.")
     root_id = state["run"]["root_task_id"]
+    caller_session = os.environ.get("PI_SESSION_FILE")
     if actor == root_id:
         lease = state["run"]["coordinator_lease"]
         if (
-            not nonempty(lease_id)
+            not nonempty(caller_session)
+            or caller_session != state["run"]["coordinator_instance_id"]
+            or not nonempty(lease_id)
             or lease_id != lease["id"]
             or parse_time(lease["expires_at"], "coordinator lease expiry")
             <= datetime.now(timezone.utc)
         ):
-            fail("root operation requires an unexpired matching coordinator lease")
+            fail("root operation requires the recorded coordinator session and an unexpired matching lease")
         lease["expires_at"] = future()
+    elif (
+        not nonempty(caller_session)
+        or caller_session != tasks[actor]["runtime"].get("agent_instance_id")
+    ):
+        fail("descendant operation requires the task's recorded Pi session")
     if state["run"]["status"] in {"complete", "cancelled"}:
         fail("terminal runs cannot be mutated")
     recovery_events = {
@@ -2783,6 +2848,7 @@ def apply_event(
         "fail-launch",
         "finish-reconciliation",
         "set-run-phase",
+        "update-integration",
     }
     if (
         state["run"].get("reconciliation_required")
@@ -2794,13 +2860,11 @@ def apply_event(
             "blocked runs allow only recovery, cleanup, cancellation, and explicit unblocking"
         )
     if actor != root_id and tasks[actor]["status"] in SETTLED:
-        fail("settled task capabilities cannot mutate state")
+        fail("settled tasks cannot mutate state")
     limits = state["run"]["limits"]
     bound_catalog = state["run"].get("model_catalog") or {}
     catalog_bound = bound_catalog.get("schema_version") is not None
     result: dict[str, Any] = {"event": event_type}
-    if event_type not in {"certify-integration", "complete-run"}:
-        state["integration"]["certification"] = None
 
     if event_type == "set-run":
         if actor != root_id:
@@ -2847,6 +2911,8 @@ def apply_event(
             or not tasks[root_id].get("todos")
         ):
             fail("execution requires a recorded user goal and root todos")
+        if target == "execute":
+            invalidate_review(state["integration"])
         state["run"]["phase"] = target
         state["run"]["status"] = "blocked" if target == "blocked" else "running"
         state["run"]["stop_reason"] = (
@@ -2874,6 +2940,11 @@ def apply_event(
                 and task_id not in recoverable_targets
             ):
                 fail(f"active task {task_id} has not been reconciled")
+        if any(
+            item.get("status") == "open"
+            for item in state["integration"].get("review_resources", [])
+        ):
+            fail("review tabs must be closed before reconciliation finishes")
         state["run"]["reconciliation_required"] = False
         state["run"]["reconciliation_evidence"] = evidence
 
@@ -2994,9 +3065,7 @@ def apply_event(
         task_id = f"task-{state['next_task_sequence']:04d}"
         state["next_task_sequence"] += 1
         require_live_catalog(state)
-        child_capability = secrets.token_urlsafe(32)
         child_event = copy.deepcopy(event)
-        child_event["capability_hash"] = token_hash(child_capability)
         if depth == limits["max_depth"] or child_event.get("task_class") == "review":
             child_event["allow_subagents"] = False
         child = task_template(task_id, actor, root_id, depth, child_event)
@@ -3042,34 +3111,7 @@ def apply_event(
         tasks[task_id] = child
         parent["children"].append(task_id)
         result["task_id"] = task_id
-        result["task_capability"] = child_capability
         result["slot_reserved"] = reserve
-
-    elif event_type == "rotate-child-capability":
-        target = event.get("task_id")
-        root_recovery = actor == root_id and state["run"].get("reconciliation_required")
-        if (
-            not isinstance(target, str)
-            or target not in tasks
-            or target == actor
-            or (tasks[target].get("parent_id") != actor and not root_recovery)
-        ):
-            fail(
-                "only the direct parent or recorded root recovery may rotate a child capability"
-            )
-        task = tasks[target]
-        if (
-            target in state["run"]["active_agent_slots"]
-            or task["status"] not in {"planning", "queued", "blocked"}
-            or task["runtime"].get("productive_prompt")
-            or task["runtime"].get("status")
-            not in {"not-started", "stopped", "settled", "cancelled"}
-        ):
-            fail("capability rotation requires an inactive, unproductive task")
-        new_capability = secrets.token_urlsafe(32)
-        task["capability_hash_history"].append(task["capability_hash"])
-        task["capability_hash"] = token_hash(new_capability)
-        result["task_capability"] = new_capability
 
     elif event_type == "record-model":
         target = event.get("task_id", actor)
@@ -3126,8 +3168,6 @@ def apply_event(
             tasks[dependency]["status"] != "done" for dependency in task["dependencies"]
         ):
             fail("cannot reserve a task slot before its dependencies finish")
-        if task["attempts"] > limits["max_retries_per_task"]:
-            fail("task has exhausted its catalog fallback attempts")
         if task["runtime"].get("productive_prompt"):
             fail("productive work already reached this task")
         task["attempts"] += 1
@@ -3395,11 +3435,10 @@ def apply_event(
         if (
             task["status"] != "blocked"
             or task["attempts"] < 1
-            or task["attempts"] > limits["max_retries_per_task"]
             or task["runtime"].get("status") not in {"stopped", "settled"}
             or task["runtime"].get("usable_contribution", False)
         ):
-            fail("fallback requires a stopped blocked task with remaining attempts")
+            fail("fallback requires a stopped blocked task without usable contribution")
         result_state = task.get("result") or {}
         if (
             result_state.get("summary") is not None
@@ -3546,12 +3585,8 @@ def apply_event(
         deadline_value = event.get("deadline_at")
         deadline_at = parse_time(deadline_value, "pane readiness deadline_at")
         overflow_sentinel = created_at == deadline_at == MAX_UTC_TIMESTAMP
-        if (
-            deadline_at < created_at
-            or deadline_at - created_at > timedelta(seconds=30)
-            or (deadline_at == created_at and not overflow_sentinel)
-        ):
-            fail("pane readiness deadline must stay within 30 seconds of the pre-create intent")
+        if not valid_readiness_deadline(created_at, deadline_at):
+            fail("pane readiness deadline must stay within 300 seconds of the pre-create intent")
         snapshot_path, snapshot_digest, snapshot_payload = read_run_artifact(
             state, event.get("snapshot_artifact"), "pane readiness snapshot"
         )
@@ -3618,12 +3653,8 @@ def apply_event(
         current_time = datetime.now(timezone.utc)
         if current_time < created_at:
             fail("pane readiness cannot be recorded before pane creation")
-        if classification in {"ready", "busy"} and deadline_at <= current_time:
-            fail("non-terminal pane readiness evidence arrived after the deadline")
-        if classification == "expired" and deadline_at > current_time:
-            fail("pane readiness cannot expire before its deadline")
         if event.get("busy_start_artifact") is not None:
-            fail("post-certification agent_pane_busy evidence cannot reopen readiness")
+            fail("an agent_pane_busy response cannot reopen completed readiness")
         readiness["probes"].append(
             {
                 "classification": classification,
@@ -3714,7 +3745,6 @@ def apply_event(
             if (
                 not isinstance(readiness, dict)
                 or readiness["probes"][-1].get("classification") != "ready"
-                or parse_time(readiness["deadline_at"], "pane readiness deadline_at") <= datetime.now(timezone.utc)
                 or extract_json_path(response, "result.agent.pane_id") != readiness.get("pane_id")
                 or ready_pane_resource is None
                 or ready_pane_resource.get("status") != "live"
@@ -3886,6 +3916,10 @@ def apply_event(
             value["files_changed"] = validate_repo_files(
                 value["files_changed"], "result.files_changed"
             )
+        if actor == root_id and any(
+            value.get(key) for key in ("files_changed", "checks", "evidence")
+        ):
+            invalidate_review(state["integration"])
         tasks[actor]["result"].update(value)
         if any(
             value.get(key)
@@ -4055,10 +4089,17 @@ def apply_event(
             for task_id, task in tasks.items()
         ):
             fail("settle every descendant before cancelling the run")
-        if state["run"]["active_agent_slots"] or any(
-            item.get("status") != "closed"
-            for task in tasks.values()
-            for item in task["runtime_resources"]
+        if (
+            state["run"]["active_agent_slots"]
+            or any(
+                item.get("status") != "closed"
+                for task in tasks.values()
+                for item in task["runtime_resources"]
+            )
+            or any(
+                item.get("status") == "open"
+                for item in state["integration"].get("review_resources", [])
+            )
         ):
             fail("settle slots and close resources before cancelling the run")
         tasks[root_id]["status"] = "cancelled"
@@ -4076,28 +4117,30 @@ def apply_event(
         if actor != root_id:
             fail("only the root task may update integration state")
         updates = event.get("updates")
+        cleanup_only = (
+            state["run"].get("reconciliation_required")
+            or state["run"]["status"] == "blocked"
+        )
+        if cleanup_only and (
+            not isinstance(updates, dict) or set(updates) != {"review_resources"}
+        ):
+            fail("recovery may update only review resource cleanup status")
         allowed = {
             "test_verdict",
             "skipped_reason",
-            "test_target_fingerprint",
             "test_evidence",
             "behavior_verdict",
             "behavior_reason",
             "behavior_eligibility",
-            "behavior_target_fingerprint",
             "behavior_evidence",
-            "evidence_target_fingerprint",
-            "evidence_index",
             "changed_files",
             "collisions",
             "review_verdict",
             "review_execution",
+            "review_requirement",
             "review_wave",
-            "review_scope",
-            "review_target_fingerprint",
-            "review_wave_fingerprint",
-            "review_waves",
             "review_perspectives",
+            "review_resources",
             "review_findings",
             "combined_report_path",
             "finished_at",
@@ -4105,244 +4148,55 @@ def apply_event(
         if not isinstance(updates, dict) or set(updates) - allowed:
             fail("update-integration contains unsupported fields")
         updates = copy.deepcopy(updates)
-        if "review_waves" in updates:
-            previous = state["integration"].get("review_waves", [])
-            proposed = updates["review_waves"]
+        if "review_wave" in updates:
+            supplied_wave = updates["review_wave"]
             if (
-                not isinstance(proposed, list)
-                or proposed[: len(previous)] != previous
-                or len(proposed) < len(previous)
+                isinstance(supplied_wave, bool)
+                or not isinstance(supplied_wave, int)
+                or supplied_wave < state["integration"].get("review_wave", 0)
             ):
-                fail("review wave history is append-only")
+                fail("review wave numbers cannot decrease")
+        if "review_resources" in updates:
+            validate_review_resource_update(
+                state["integration"].get("review_resources", []),
+                updates["review_resources"],
+                cleanup_only=cleanup_only,
+            )
         if "changed_files" in updates:
             updates["changed_files"] = validate_repo_files(
                 updates["changed_files"], "integration.changed_files"
             )
+        substantive = {
+            "test_verdict",
+            "skipped_reason",
+            "test_evidence",
+            "behavior_verdict",
+            "behavior_reason",
+            "behavior_eligibility",
+            "behavior_evidence",
+            "changed_files",
+            "collisions",
+        }
+        review_update = {
+            "review_verdict",
+            "review_execution",
+            "review_requirement",
+            "review_wave",
+            "review_perspectives",
+            "review_resources",
+            "combined_report_path",
+        }
+        recorded_review = state["integration"].get("review_wave", 0) > 0
+        if recorded_review and set(updates) & substantive and set(updates) & review_update:
+            fail("record rework evidence before recording a fresh review")
+        if recorded_review and set(updates) & substantive:
+            invalidate_review(state["integration"])
         state["integration"].update(updates)
-
-    elif event_type == "certify-integration":
-        if actor != root_id:
-            fail("only the root task may certify integration")
-        integration = state["integration"]
-        if event.get("validated_revision") != state["revision"]:
-            fail("state changed after final validation")
-        fingerprint = event.get("fingerprint")
-        if (
-            not nonempty(fingerprint)
-            or fingerprint != integration.get("review_target_fingerprint")
-            or live_review_fingerprint(state) != fingerprint
-        ):
-            fail("certification fingerprint does not match the live review state")
-        if (integration.get("review_scope") or {}).get("base_sha") != state["run"][
-            "base_commit"
-        ]:
-            fail("certification review base does not match the run base")
-        if run_owned_files(state) != sorted(integration.get("changed_files", [])):
-            fail(
-                "certification changed files do not match the run-owned worktree delta"
-            )
-        review_paths = (integration.get("review_scope") or {}).get("paths") or []
-        normalized_scope = [
-            posixpath.normpath(item.replace("\\", "/"))
-            for item in review_paths
-            if isinstance(item, str)
-        ]
-        if any(
-            not any(
-                scope == "."
-                or changed == scope
-                or changed.startswith(scope.rstrip("/") + "/")
-                for scope in normalized_scope
-            )
-            for changed in integration.get("changed_files", [])
-        ):
-            fail(
-                "certification review scope does not cover every run-owned changed file"
-            )
-        artifact_digests = event.get("artifact_digests")
-        verify_artifact_digests(state, artifact_digests)
-        validate_final_contract(state, fingerprint, artifact_digests)
-        if integration.get("review_execution") != "independent":
-            fail("certification requires independent review")
-        required_reviews = {
-            "correctness_safety",
-            "architecture_integration",
-            "regression_fix_quality",
-        }
-        perspectives = integration.get("review_perspectives") or {}
-        if set(perspectives) != required_reviews or any(
-            item.get("status") != "complete"
-            or item.get("output_path") not in artifact_digests
-            for item in perspectives.values()
-        ):
-            fail("certification requires three complete reviewer outputs")
-        for perspective in perspectives.values():
-            validate_review_perspective_proof(state, perspective)
-        reviewer_instances = [
-            item.get("agent_instance_id") for item in perspectives.values()
-        ]
-        waves = integration.get("review_waves") or []
-        current_wave = next(
-            (
-                item
-                for item in waves
-                if item.get("wave") == integration.get("review_wave")
-            ),
-            None,
-        )
-        if not isinstance(current_wave, dict) or set(
-            current_wave.get("reviewer_instance_ids") or []
-        ) != set(reviewer_instances):
-            fail("current review wave does not bind reviewer instances")
-        prior_reviewer_instances = {
-            instance
-            for item in waves
-            if item.get("wave") != integration.get("review_wave")
-            for instance in (item.get("reviewer_instance_ids") or [])
-        }
-        contributor_instances = {
-            state["run"]["coordinator_instance_id"],
-            *state["run"].get("coordinator_instance_history", []),
-            *[
-                task["runtime"].get("agent_instance_id")
-                for task in tasks.values()
-                if task["runtime"].get("agent_instance_id")
-                and (
-                    task["runtime"].get("productive_prompt")
-                    or task["result"].get("files_changed")
-                )
-            ],
-        }
-        if integration.get("review_execution") == "independent" and (
-            len(set(reviewer_instances)) != 3
-            or any(
-                instance in contributor_instances
-                or instance in prior_reviewer_instances
-                for instance in reviewer_instances
-            )
-        ):
-            fail(
-                "independent review instances are not fresh or distinct from contributors"
-            )
-        required_artifacts = {
-            integration.get("combined_report_path"),
-            "contract-review-pack.json",
-            "evidence/contract-preflight.json",
-            os.path.relpath(
-                Path(state["run"]["repo_root"]) / integration.get("evidence_index", ""),
-                state_directory(state),
-            ),
-        }
-        for perspective in perspectives.values():
-            required_artifacts.update(
-                (perspective.get(field) or {}).get("path")
-                for field in (
-                    "resolution_artifact",
-                    "start_response_artifact",
-                    "verification_artifact",
-                )
-            )
-        required_artifacts.update(
-            item.get("artifact") for item in integration.get("test_evidence", [])
-        )
-        required_artifacts.update(
-            item.get("artifact") for item in integration.get("behavior_evidence", [])
-        )
-        required_artifacts.update(
-            task["runtime"].get("output_path")
-            for task in tasks.values()
-            if task["runtime"].get("productive_prompt")
-        )
-        required_artifacts.update(
-            intent.get("output_path")
-            for task in tasks.values()
-            for intent in task.get("runtime_intents", [])
-            if intent.get("status") == "bound"
-        )
-        required_artifacts.update(
-            resource.get("closure_artifact")
-            for task in tasks.values()
-            for resource in task.get("runtime_resources", [])
-            if resource.get("status") == "closed"
-        )
-        if any(item not in artifact_digests for item in required_artifacts if item):
-            fail("certification is missing required report or evidence digests")
-        if (
-            integration.get("review_verdict") != "pass"
-            or integration.get("test_verdict") not in {"pass", "skipped"}
-            or integration.get("behavior_verdict")
-            not in {"pass", "user-pending", "not-applicable"}
-        ):
-            fail(
-                "integration cannot be certified before checks, behavior handoff, and review settle"
-            )
-        if any(
-            item.get("status") == "open"
-            for item in integration.get("review_findings", [])
-        ):
-            fail("review findings remain open")
-        if integration.get("behavior_verdict") == "pass":
-            evidence = integration.get("behavior_evidence", [])
-            artifact_paths = [item.get("artifact") for item in evidence]
-            if (
-                {item.get("case_type") for item in evidence}
-                != {"happy", "error", "edge"}
-                or len(set(artifact_paths)) != 3
-                or any(
-                    not isinstance(path, str)
-                    or not posixpath.normpath(path).startswith("evidence/")
-                    for path in artifact_paths
-                )
-                or any(item.get("fingerprint") != fingerprint for item in evidence)
-            ):
-                fail(
-                    "behavior pass requires current distinct evidence-folder happy, error, and edge artifacts"
-                )
-        if integration.get("behavior_verdict") == "user-pending":
-            evidence = integration.get("behavior_evidence", [])
-            if (
-                len(evidence) != 1
-                or evidence[0].get("case_type") != "user-handoff"
-                or evidence[0].get("fingerprint") != fingerprint
-                or not posixpath.normpath(evidence[0].get("artifact", "")).startswith(
-                    "evidence/"
-                )
-                or not nonempty(integration.get("behavior_reason"))
-            ):
-                fail(
-                    "user-pending behavior verification requires one current evidence-folder manual-test handoff and a reason"
-                )
-        if any(
-            item.get("status") != "resolved"
-            for item in integration.get("collisions", [])
-        ):
-            fail("integration collisions remain unresolved")
-        state["integration"]["certification"] = {
-            "fingerprint": fingerprint,
-            "review_wave": state["integration"].get("review_wave"),
-            "revision": state["revision"] + 1,
-            "artifact_digests": artifact_digests,
-            "changed_files": sorted(integration.get("changed_files", [])),
-            "certified_at": now(),
-        }
 
     elif event_type == "complete-run":
         if actor != root_id:
             fail("only the root task may complete the run")
         task = tasks[root_id]
-        certification = state["integration"].get("certification") or {}
-        if certification.get("revision") != state["revision"]:
-            fail("final integration certification is missing or stale")
-        if live_review_fingerprint(state) != certification.get("fingerprint"):
-            fail("live change moved after certification")
-        if run_owned_files(state) != certification.get("changed_files"):
-            fail("run-owned worktree delta moved after certification")
-        verify_artifact_digests(state, certification.get("artifact_digests"))
-        recompute_contract_preflight(
-            state,
-            certification.get("fingerprint"),
-            certification.get("artifact_digests"),
-        )
         if state["run"]["phase"] != "review":
             fail("the run must be in review before completion")
         if any(
@@ -4353,9 +4207,7 @@ def apply_event(
             fail("root required todos are not done")
         if any(tasks[child]["status"] not in SETTLED for child in task["children"]):
             fail("root descendants are not settled")
-        if not nonempty(task["result"].get("summary")) or task["result"].get(
-            "blockers"
-        ):
+        if not nonempty(task["result"].get("summary")) or task["result"].get("blockers"):
             fail("root result is missing or still blocked")
         if state["run"]["active_agent_slots"] or any(
             item.get("status") != "closed"
@@ -4363,16 +4215,7 @@ def apply_event(
             for item in value["runtime_resources"]
         ):
             fail("runtime slots remain or a runtime resource is not closed")
-        if live_review_fingerprint(state) != certification.get(
-            "fingerprint"
-        ) or run_owned_files(state) != certification.get("changed_files"):
-            fail("worktree changed during final completion checks")
-        verify_artifact_digests(state, certification.get("artifact_digests"))
-        recompute_contract_preflight(
-            state,
-            certification.get("fingerprint"),
-            certification.get("artifact_digests"),
-        )
+        validate_integration_ready(state)
         task["status"] = "done"
         task["phase"] = TASK_PHASES["done"]
         state["run"]["status"] = "complete"
@@ -4391,14 +4234,12 @@ def apply_event(
 
 def initial_state(
     feature: str,
-    owner_token: str,
     lease_id: str,
     coordinator_instance_id: str,
     base_commit: str,
     repo_root: str,
 ) -> dict[str, Any]:
     root_event = {
-        "capability_hash": token_hash(owner_token),
         "title": "Coordinate the requested implementation",
         "outcome": "The requested behavior is implemented, integrated, verified, and reviewed with the execution mode recorded honestly.",
         "acceptance_criteria": [
@@ -4424,6 +4265,7 @@ def initial_state(
             "phase": "bootstrap",
             "repo_root": str(root_path),
             "coordinator_instance_id": coordinator_instance_id,
+            "coordinator_session_bound": True,
             "coordinator_instance_history": [],
             "coordinator_model": current_coordinator_model(coordinator_instance_id),
             "coordinator_model_history": [],
@@ -4443,28 +4285,22 @@ def initial_state(
         "integration": {
             "test_verdict": "pending",
             "skipped_reason": None,
-            "test_target_fingerprint": None,
             "test_evidence": [],
             "behavior_verdict": "pending",
             "behavior_reason": None,
             "behavior_eligibility": None,
-            "behavior_target_fingerprint": None,
             "behavior_evidence": [],
-            "evidence_target_fingerprint": None,
-            "evidence_index": None,
             "changed_files": [],
             "collisions": [],
             "review_verdict": "pending",
             "review_execution": None,
+            "review_requirement": None,
             "review_wave": 0,
-            "review_scope": None,
-            "review_target_fingerprint": None,
-            "review_wave_fingerprint": None,
-            "review_waves": [],
+            "minimum_review_wave": 0,
             "review_perspectives": {},
+            "review_resources": [],
             "review_findings": [],
             "combined_report_path": None,
-            "certification": None,
             "finished_at": None,
         },
     }
@@ -4483,9 +4319,6 @@ def main() -> None:
     init_parser.add_argument("path", type=Path)
     init_parser.add_argument("--feature", required=True)
     init_parser.add_argument(
-        "--owner-token", default=os.environ.get("IMPLEMENT_TASK_CAPABILITY")
-    )
-    init_parser.add_argument(
         "--lease-id", default=os.environ.get("IMPLEMENT_COORDINATOR_LEASE_ID")
     )
     init_parser.add_argument("--coordinator-instance-id", required=True)
@@ -4497,18 +4330,15 @@ def main() -> None:
     resume_parser.add_argument("path", type=Path)
     resume_parser.add_argument("--feature", required=True)
     resume_parser.add_argument(
-        "--owner-token", default=os.environ.get("IMPLEMENT_TASK_CAPABILITY")
+        "--lease-id", default=os.environ.get("IMPLEMENT_COORDINATOR_LEASE_ID")
     )
     resume_parser.add_argument(
-        "--lease-id", default=os.environ.get("IMPLEMENT_COORDINATOR_LEASE_ID")
+        "--coordinator-instance-id", default=os.environ.get("PI_SESSION_FILE")
     )
 
     apply_parser = subparsers.add_parser("apply")
     apply_parser.add_argument("path", type=Path)
     apply_parser.add_argument("--actor", required=True)
-    apply_parser.add_argument(
-        "--capability", default=os.environ.get("IMPLEMENT_TASK_CAPABILITY")
-    )
     apply_parser.add_argument(
         "--lease-id", default=os.environ.get("IMPLEMENT_COORDINATOR_LEASE_ID")
     )
@@ -4533,8 +4363,8 @@ def main() -> None:
     if args.command == "init":
         if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", args.feature or ""):
             fail("feature name must be lowercase kebab-case")
-        if not nonempty(args.owner_token) or not nonempty(args.lease_id):
-            fail("init requires task capability and coordinator lease environment")
+        if not nonempty(args.lease_id):
+            fail("init requires coordinator lease environment")
         expected_canonical = (
             Path(args.repo_root).resolve()
             / "var"
@@ -4548,7 +4378,6 @@ def main() -> None:
             fail(f"state already exists: {path}")
         state = initial_state(
             args.feature,
-            args.owner_token,
             args.lease_id,
             args.coordinator_instance_id,
             args.base_commit,
@@ -4560,15 +4389,15 @@ def main() -> None:
         return
 
     if args.command == "resume":
-        if not nonempty(args.owner_token) or not nonempty(args.lease_id):
-            fail("resume requires task capability and coordinator lease environment")
+        caller_session = os.environ.get("PI_SESSION_FILE")
+        if not nonempty(args.lease_id) or not nonempty(args.coordinator_instance_id):
+            fail("resume requires coordinator lease and Pi session identity")
+        if not nonempty(caller_session) or args.coordinator_instance_id != caller_session:
+            fail("resume identity must match the calling Pi session")
         with LockedState(path) as state:
             validate(state, path)
-            root_id = state["run"]["root_task_id"]
-            if state.get("feature_name") != args.feature or not secrets.compare_digest(
-                state["tasks"][root_id]["capability_hash"], token_hash(args.owner_token)
-            ):
-                fail("feature name or owner token does not match")
+            if state.get("feature_name") != args.feature:
+                fail("feature name does not match")
             lease = state["run"]["coordinator_lease"]
             lease_expired = parse_time(
                 lease["expires_at"], "coordinator lease expiry"
@@ -4590,20 +4419,41 @@ def main() -> None:
                 for item in task.get("runtime_intents", [])
                 if item.get("status") == "planned"
             ]
+            open_review_resources = [
+                item["id"]
+                for item in state["integration"].get("review_resources", [])
+                if item.get("status") == "open"
+            ]
             reconciliation_required = bool(
-                state["run"]["active_agent_slots"] or live_resources or planned_intents
+                state["run"]["active_agent_slots"]
+                or live_resources
+                or planned_intents
+                or open_review_resources
             )
-            if takeover:
-                state["run"]["coordinator_instance_history"].append(
-                    state["run"]["coordinator_instance_id"]
+            stored_instance = state["run"]["coordinator_instance_id"]
+            legacy_session_binding = (
+                not takeover
+                and args.coordinator_instance_id != stored_instance
+                and state["run"].get("coordinator_session_bound") is not True
+            )
+            if (
+                not takeover
+                and args.coordinator_instance_id != stored_instance
+                and not legacy_session_binding
+            ):
+                fail("the active coordinator lease belongs to a different Pi session")
+            if takeover or legacy_session_binding:
+                state["run"].setdefault("coordinator_instance_history", []).append(
+                    stored_instance
                 )
-                state["run"]["coordinator_model_history"].append(
+                state["run"].setdefault("coordinator_model_history", []).append(
                     copy.deepcopy(state["run"]["coordinator_model"])
                 )
-                state["run"]["coordinator_instance_id"] = str(secrets.token_hex(16))
+                state["run"]["coordinator_instance_id"] = args.coordinator_instance_id
                 state["run"]["coordinator_model"] = current_coordinator_model(
-                    state["run"]["coordinator_instance_id"]
+                    args.coordinator_instance_id
                 )
+            state["run"]["coordinator_session_bound"] = True
             state["run"]["reconciliation_required"] = reconciliation_required
             state["run"]["reconciliation_evidence"] = (
                 None
@@ -4655,9 +4505,7 @@ def main() -> None:
     if not isinstance(event, dict):
         fail("event must be an object")
     with LockedState(path) as state:
-        result = apply_event(
-            state, path, args.actor, args.capability, args.lease_id, event
-        )
+        result = apply_event(state, path, args.actor, args.lease_id, event)
         save_atomic(path, state)
     print(json.dumps({**result, "revision": state["revision"]}, sort_keys=True))
 

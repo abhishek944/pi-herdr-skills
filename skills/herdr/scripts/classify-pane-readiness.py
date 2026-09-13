@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 EXIT_CODES = {"ready": 0, "busy": 10, "expired": 20, "ambiguous": 30}
+READINESS_TIMEOUT = timedelta(seconds=300)
 RFC3339 = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.(\d+))?"
     r"(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$"
@@ -40,6 +41,30 @@ def format_time(value: datetime) -> str:
 
 def ambiguous(reason: str) -> tuple[str, str, dict[str, Any]]:
     return "ambiguous", reason, {}
+
+
+def load_anchor(path: str) -> tuple[str, str, datetime, datetime]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or set(payload) != {
+        "createdAt", "deadlineAt", "timeoutSeconds", "version"
+    }:
+        raise ValueError("readiness anchor has an invalid schema")
+    if (
+        type(payload.get("version")) is not int
+        or payload["version"] != 1
+        or type(payload.get("timeoutSeconds")) is not int
+        or payload["timeoutSeconds"] != 300
+    ):
+        raise ValueError("readiness anchor has an unsupported version or timeout")
+    created_text = payload.get("createdAt")
+    deadline_text = payload.get("deadlineAt")
+    if not isinstance(created_text, str) or not isinstance(deadline_text, str):
+        raise ValueError("readiness anchor timestamps are missing or invalid")
+    created_at = parse_time(created_text)
+    deadline = parse_time(deadline_text)
+    if deadline - created_at != READINESS_TIMEOUT:
+        raise ValueError("readiness anchor deadline is not exactly 300 seconds after creation")
+    return created_text, deadline_text, created_at, deadline
 
 
 def positive_integer(value: Any) -> bool:
@@ -116,8 +141,8 @@ def classify(
     now: datetime,
     previous_payload: Any | None = None,
 ) -> tuple[str, str, dict[str, Any]]:
-    if deadline <= created_at or deadline - created_at > timedelta(seconds=30):
-        return ambiguous("the readiness deadline is not anchored within 30 seconds of creation")
+    if deadline <= created_at or deadline - created_at > READINESS_TIMEOUT:
+        return ambiguous("the readiness deadline is not anchored within 300 seconds of creation")
     if now < created_at:
         return ambiguous("the readiness clock is earlier than pane creation")
     current, error = process_snapshot(payload, expected_pane)
@@ -131,18 +156,6 @@ def classify(
             return ambiguous("pane or shell identity changed between readiness snapshots")
         if len(previous["processes"]) == 1:
             return ambiguous("readiness was rechecked after the pane was already ready")
-        previous_extras = {
-            item["pid"]: item
-            for item in previous["processes"]
-            if item["pid"] != previous["shellPid"]
-        }
-        current_extras = {
-            item["pid"]: item
-            for item in current["processes"]
-            if item["pid"] != current["shellPid"]
-        }
-        if any(previous_extras.get(pid) != item for pid, item in current_extras.items()):
-            return ambiguous("foreground work was added or replaced during readiness recheck")
     if now >= deadline:
         return "expired", "the original pane-readiness deadline has elapsed", {
             "paneId": expected_pane,
@@ -172,10 +185,18 @@ def main() -> int:
         help="Previous saved busy classification that binds the immutable recheck deadline",
     )
     parser.add_argument("--expected-pane", required=True, help="Exact pane ID being certified")
-    parser.add_argument("--created-at", required=True, help="Persisted pre-create intent timestamp")
+    anchor = parser.add_mutually_exclusive_group(required=True)
+    anchor.add_argument(
+        "--anchor-file",
+        help="JSON artifact created by capture-pane-readiness-anchor.py immediately before pane creation",
+    )
+    anchor.add_argument(
+        "--created-at",
+        help="Legacy persisted pre-create timestamp; prefer --anchor-file for new workflows",
+    )
     parser.add_argument(
         "--deadline-at",
-        help="Persisted RFC 3339 deadline; when omitted, derive exactly 30 seconds from created-at",
+        help="Legacy persisted RFC 3339 deadline; valid only with --created-at",
     )
     parser.add_argument("--now", help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -195,19 +216,28 @@ def main() -> int:
             if previous_classification_supplied
             else None
         )
-        if previous_supplied and args.deadline_at is None:
-            raise ValueError("--deadline-at is required for a bounded recheck")
         if previous_supplied and previous is None:
             raise ValueError("previous snapshot must not be null")
-        created_at = parse_time(args.created_at)
-        if args.deadline_at is not None:
-            deadline = parse_time(args.deadline_at)
+        if args.anchor_file is not None:
+            if args.deadline_at is not None:
+                raise ValueError("--deadline-at cannot be combined with --anchor-file")
+            created_text, deadline_text, created_at, deadline = load_anchor(args.anchor_file)
         else:
-            try:
-                deadline = created_at + timedelta(seconds=30)
-            except OverflowError:
-                deadline = datetime.max.replace(tzinfo=timezone.utc)
-                raise ValueError("derived deadline exceeds the supported timestamp range")
+            if previous_supplied and args.deadline_at is None:
+                raise ValueError("--deadline-at is required for a legacy bounded recheck")
+            created_text = args.created_at
+            created_at = parse_time(created_text)
+            if args.deadline_at is not None:
+                deadline_text = args.deadline_at
+                deadline = parse_time(deadline_text)
+            else:
+                try:
+                    deadline = created_at + READINESS_TIMEOUT
+                    deadline_text = format_time(deadline)
+                except OverflowError:
+                    deadline = datetime.max.replace(tzinfo=timezone.utc)
+                    deadline_text = format_time(deadline)
+                    raise ValueError("derived deadline exceeds the supported timestamp range")
         if previous_supplied:
             previous_snapshot, previous_error = process_snapshot(previous, args.expected_pane)
             if previous_error:
@@ -215,8 +245,8 @@ def main() -> int:
             validate_previous_classification(
                 previous_classification,
                 args.expected_pane,
-                args.created_at,
-                args.deadline_at,
+                created_text,
+                deadline_text,
                 previous_snapshot,
             )
         now = parse_time(args.now) if args.now else datetime.now(timezone.utc)
@@ -231,12 +261,8 @@ def main() -> int:
         "classification": classification,
         "reason": reason,
         "expectedPane": args.expected_pane,
-        "createdAt": args.created_at,
-        "deadlineAt": (
-            args.deadline_at
-            if args.deadline_at is not None
-            else format_time(deadline) if "deadline" in locals() else None
-        ),
+        "createdAt": created_text if "created_text" in locals() else None,
+        "deadlineAt": deadline_text if "deadline_text" in locals() else None,
         "observedAt": format_time(now) if "now" in locals() else None,
         **details,
     }, sort_keys=True))

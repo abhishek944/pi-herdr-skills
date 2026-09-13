@@ -71,9 +71,8 @@ reference, viewport, decision tree, and selection rationale before editing code.
 Include the feature name, UI/UX session slug, parent Grill Me slug, and resolved and
 deferred branch IDs. The final visual decision tree must list every branch under
 Resolved or Deferred so review can verify exact coverage. Do not reconstruct a selected direction from the label or
-screenshot alone when its source artifact is available. Every resolved branch must
-be represented in `var/<feature-name>/implement/contract-review-pack.json` and pass
-the global Agent Review contract-preflight validator before reviewer launch.
+screenshot alone when its source artifact is available. Give final reviewers the
+selected decision tree and current visual comparison directly.
 
 ## Post-code review
 

@@ -5,7 +5,6 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 FEATURE_NAME="${1:-}"
 ACTION="${2:-}"
-OWNER_TOKEN_ARG="${IMPLEMENT_TASK_CAPABILITY:-}"
 LEASE_ID_ARG="${IMPLEMENT_COORDINATOR_LEASE_ID:-}"
 STATE_DIR="$ROOT/var/$FEATURE_NAME/implement"
 STATE_FILE="$STATE_DIR/state.json"
@@ -13,7 +12,7 @@ CLAIM_DIR="$ROOT/var/$FEATURE_NAME/.implement-coordinator-claim"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
-  echo "Usage: $0 <feature-name> [--resume] (resume credentials come from IMPLEMENT_TASK_CAPABILITY and IMPLEMENT_COORDINATOR_LEASE_ID)" >&2
+  echo "Usage: $0 <feature-name> [--resume] (resume uses IMPLEMENT_COORDINATOR_LEASE_ID)" >&2
 }
 
 if [[ ! "$FEATURE_NAME" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
@@ -37,8 +36,8 @@ for candidate in "$ROOT/var" "$ROOT/var/$FEATURE_NAME" "$STATE_DIR"; do
 done
 
 if [[ "$ACTION" == "--resume" ]]; then
-  if [[ -z "$OWNER_TOKEN_ARG" || -z "$LEASE_ID_ARG" ]]; then
-    echo "FAIL: resume requires the owner token and coordinator lease ID printed when the run was created" >&2
+  if [[ -z "$LEASE_ID_ARG" ]]; then
+    echo "FAIL: resume requires the coordinator lease ID printed when the run was created" >&2
     exit 1
   fi
   if [[ ! -f "$STATE_FILE" ]]; then
@@ -50,7 +49,7 @@ if [[ "$ACTION" == "--resume" ]]; then
     fi
     exit 1
   fi
-  IMPLEMENT_TASK_CAPABILITY="$OWNER_TOKEN_ARG" IMPLEMENT_COORDINATOR_LEASE_ID="$LEASE_ID_ARG" \
+  IMPLEMENT_COORDINATOR_LEASE_ID="$LEASE_ID_ARG" \
     python3 "$SCRIPT_DIR/state-store.py" resume "$STATE_FILE" --feature "$FEATURE_NAME"
   exit 0
 fi
@@ -91,15 +90,18 @@ cleanup() {
 trap cleanup EXIT
 
 STAGE_DIR="$(mktemp -d "$ROOT/var/$FEATURE_NAME/.implement-init.XXXXXX")"
-OWNER_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 LEASE_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
-COORDINATOR_INSTANCE_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+COORDINATOR_INSTANCE_ID="${PI_SESSION_FILE:-}"
+if [[ -z "$COORDINATOR_INSTANCE_ID" ]]; then
+  echo "FAIL: implementation state requires a Pi session identity" >&2
+  exit 1
+fi
 if ! BASE_COMMIT="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null)"; then
   echo "FAIL: implement state requires a repository with an initial commit" >&2
   exit 1
 fi
 mkdir -p "$STAGE_DIR/evidence" "$STAGE_DIR/outputs" "$STAGE_DIR/reviews"
-IMPLEMENT_TASK_CAPABILITY="$OWNER_TOKEN" IMPLEMENT_COORDINATOR_LEASE_ID="$LEASE_ID" \
+IMPLEMENT_COORDINATOR_LEASE_ID="$LEASE_ID" \
 python3 "$SCRIPT_DIR/state-store.py" init "$STAGE_DIR/state.json" \
   --feature "$FEATURE_NAME" \
   --coordinator-instance-id "$COORDINATOR_INSTANCE_ID" \
@@ -118,7 +120,6 @@ rm -rf "$CLAIM_DIR"
 
 printf 'State directory: %s\n' "$STATE_DIR"
 printf 'State file: %s\n' "$STATE_FILE"
-printf 'Owner token: %s\n' "$OWNER_TOKEN"
 printf 'Coordinator lease ID: %s\n' "$LEASE_ID"
 printf 'Coordinator instance ID: %s\n' "$COORDINATOR_INSTANCE_ID"
-printf 'Set IMPLEMENT_TASK_CAPABILITY and IMPLEMENT_COORDINATOR_LEASE_ID for root state updates.\n'
+printf 'Set IMPLEMENT_COORDINATOR_LEASE_ID for root state updates.\n'

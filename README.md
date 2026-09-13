@@ -1,6 +1,6 @@
 # pi-herdr-skills
 
-A portable snapshot of 14 global [Pi](https://pi.dev/) skills for planning, implementation, review, browser work, visual explanations, and [Herdr](https://herdr.dev/)-hosted Pi agents.
+A portable snapshot of 14 global [Pi](https://pi.dev/) skills and a permission-gate extension for planning, implementation, review, browser work, visual explanations, and [Herdr](https://herdr.dev/)-hosted Pi agents.
 
 > [!WARNING]
 > Pi extensions run with your user permissions, and skills can instruct an agent to run commands. Review this repository and every extension you install before enabling it.
@@ -22,7 +22,7 @@ cd pi-herdr-skills
 ./scripts/install.sh
 ```
 
-The installer copies all 14 skills into Pi's global `~/.pi/agent/skills/` directory. It refuses to overwrite a different skill with the same name. If you intentionally replace conflicts, `./scripts/install.sh --force` backs up the existing directories under `~/.pi/agent/skills-backups/` first.
+The installer copies all 14 skills into Pi's global `~/.pi/agent/skills/` directory and `extensions/permission-gate.ts` into `~/.pi/agent/extensions/`. It refuses to overwrite a different managed skill or extension. If you intentionally replace conflicts, `./scripts/install.sh --force` backs up the existing files under `~/.pi/agent/skills-backups/` first.
 
 A global copy is required for these workflows because `model-routing-policy` deliberately accepts only Pi's trusted global model catalog. Do not install this repository as a Git-backed Pi package; that package location would make the implementation and review workflows stop at their model-routing safety check.
 
@@ -38,6 +38,12 @@ git pull --ff-only
 npm run check
 ./scripts/install.sh --dry-run
 ./scripts/install.sh --force
+```
+
+If you are updating from a version that included the retired `herdr-orchestrator` skill, the installer cannot discover that removed source directory. Inspect and back up any local changes, then remove its installed copy and reload Pi:
+
+```bash
+rm -rf -- "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/skills/herdr-orchestrator"
 ```
 
 `--force` creates a backup before replacing any locally changed skill. To uninstall matching copies:
@@ -60,9 +66,9 @@ If an installed skill was modified, uninstall refuses to remove it unless you ad
 | `discuss` | Investigates and debugs a repository without applying a fix. |
 | `grill-me` | Challenges a plan through a browser-based decision interview. |
 | `herdr` | Controls Herdr panes and Herdr-hosted Pi agents when a workflow authorizes it. |
-| `herdr-orchestrator` | Monitors work across Herdr workspaces, safely recovers narrow transient failures, escalates decisions, and suggests grounded follow-ups. |
 | `implement` | Coordinates implementation with task state, Herdr delegation, checks, and review. |
 | `model-routing-policy` | Selects and verifies provider, model, and thinking settings for delegated Pi agents. |
+| `no-unit-tests` | Prevents unit-test creation or execution unless the user explicitly requests it. |
 | `plainspoken-responses` | Keeps user-facing replies clear, friendly, and easy to follow. |
 | `read-flows` | Finds and reads repository flow documentation before relevant changes. |
 | `ui-ux-grill-me` | Captures an interface and records visual UX choices in a browser. |
@@ -70,16 +76,21 @@ If an installed skill was modified, uninstall refuses to remove it unless you ad
 
 Some skills depend on other skills in this repository. Install the complete set rather than copying only `implement`, `agent-review`, or `design-council`.
 
+## Included extension
+
+`extensions/permission-gate.ts` blocks catastrophic or ambiguous shell operations and asks for explicit confirmation before other destructive commands. In Pi's TUI, it emits balanced `herdr:blocked` open/close events around each confirmation; the Herdr integration counts overlapping waits so connected interfaces remain in their permission-waiting state until every dialog closes. Print and JSON modes reject confirmation-covered commands without prompting. RPC mode can request confirmation, but its wait is not reported as a Herdr pet state. An exact recursive-deletion target outside the current project may proceed only after confirmation in an interactive Pi session. Broad targets, parent traversal, filesystem or home roots, protected system roots, and credential-sensitive paths remain blocked.
+
 ### Browser workflow prerequisite
 
-`browser-use` and the automated capture steps in `ui-ux-grill-me` require the Browser Use CLI. Human question and comparison pages in `grill-me` and `ui-ux-grill-me` open through the operating system's visible default browser instead; on macOS they use `open` and never Browser Use. This snapshot uses the command interface from [`browser-use` 0.12.9](https://github.com/browser-use/browser-use/blob/0.12.9/browser_use/skill_cli/README.md):
+`browser-use` and the automated capture steps in `ui-ux-grill-me` require the current Browser Use CLI. Human question and comparison pages in `grill-me` and `ui-ux-grill-me` open through the operating system's visible default browser instead; on macOS they use `open` and never Browser Use.
 
 ```bash
-uv tool install 'browser-use==0.12.9'
-browser-use doctor
+uv tool install --python 3.12 --upgrade --force browser-use
+browser-use --doctor
+browser-use skill show
 ```
 
-Use that pinned version unless you also update and recheck the bundled browser skill against a newer CLI.
+Browser actions use Python through standard input with pre-imported helpers. The older command-mode interface (`--session`, `open`, `state`, `click`, `input`, `eval`, and `record start/stop`) is not supported by the bundled skill.
 
 ## Herdr setup
 
@@ -127,7 +138,21 @@ The implementation and review workflows require Herdr-hosted Pi agents.
    herdr integration status
    ```
 
-The agent workflows never silently weaken their requirements. A newly created pane may briefly remain busy while its shell finishes startup; the workflows wait through that bounded warm-up before declaring setup failed. The readiness deadline is derived from the single persisted pre-create timestamp, avoiding invalid windows caused by separate clock reads. Workflow tabs are capped at four panes and use a 2x2 layout; larger agent batches spill into additional tabs in groups of four. When automatic routing hits a model-specific quota or availability failure before any useful work, they try another eligible catalog model with the same task, quality, input, thinking, and review requirements. Explicit user model choices, Herdr setup failures that remain after readiness recovery, uncertain partial work, exhausted candidates, and launch-verification failures still stop safely. Read the [Herdr agent guide](https://herdr.dev/agent-guide.md) for concepts and controls.
+The agent workflows never silently weaken their requirements. A newly created pane may briefly remain busy while its shell finishes startup; the workflows wait through that bounded warm-up, including sequential environment hooks and activation helpers, before declaring setup failed. The readiness deadline is derived from the single persisted pre-create timestamp, limits only readiness attainment, and does not expire an already-ready proof while the synchronized agent batch launches. Workflow tabs are capped at four panes and use a 2x2 layout; larger agent batches spill into additional tabs in groups of four. When automatic routing hits a model-specific quota or availability failure before any useful work, they try another eligible catalog model with the same task, quality, input, thinking, and review requirements. Explicit user model choices, Herdr setup failures that remain after readiness recovery, uncertain partial work, exhausted candidates, and launch-verification failures still stop safely. Read the [Herdr agent guide](https://herdr.dev/agent-guide.md) for concepts and controls.
+
+### Subagent model policy
+
+Routine non-review agents use **GPT-5.6 Sol or Terra only**. Sol handles general
+work; Terra is preferred for focused edits. Independent review runs automatically
+only for substantial features or complicated changes where complexity, risk, breadth,
+or uncertainty makes direct inspection insufficient. Straightforward low-risk changes,
+including localized UI work across closely related files, skip review when normal checks
+and direct inspection are enough. Explicitly requested simple reviews use **GPT-5.6 Sol**. **GPT-6 Astra at high thinking** is reserved for complicated
+reviews. Outside review, Astra requires an evidence-based exceptional-debugging
+exploration in the shared resolver. Production impact, timeouts, simple review, or
+unavailable Sol/Terra models do not unlock Astra. Other catalog entries are retained
+only for caller/contributor verification. No eligible permitted model means a clear blocker, not a wider
+fallback. See [model-routing-policy](skills/model-routing-policy/SKILL.md).
 
 ## Extensions in the source setup
 
@@ -173,6 +198,7 @@ Package-provided skills, such as the image-generation skill, remain owned and up
 
 ```text
 skills/                 Pi skill directories and their supporting files
+extensions/             Pi command-safety extensions
 skills-manifest.json    Exact skill file checksums and executable modes
 scripts/install.sh      Conflict-safe global installer and uninstaller
 scripts/check-repo.sh   Structure, portability, and sensitive-data checks

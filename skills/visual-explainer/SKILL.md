@@ -10,7 +10,7 @@ metadata:
 
 ## Helper-script boundary
 
-Treat files inside any skill's `scripts/` directory as opaque executables during normal use. Never read, search, quote, summarize, or infer behavior from their source. Use only interfaces documented in `SKILL.md`, its references, or the helper's documented self-description command. If a helper fails, first determine from its response and documented interface whether the failure was clearly non-mutating. For a usage or validation error proven to have made no change, correct the invocation from those documented sources and retry at most once. Stop and report when the failure may have partially changed state, is destructive, involves credentials or authorization, remains ambiguous, or cannot be corrected after that bounded retry. The only exception to source inspection is when the user's latest request explicitly asks to inspect, debug, review, or modify that helper script itself.
+Treat files inside any skill's `scripts/` directory as opaque executables during normal use. Never read, search, quote, summarize, or infer behavior from their source. Use only interfaces documented in `SKILL.md`, its references, or the helper's documented self-description command. If a helper fails, first determine from its response and documented interface whether the failure was clearly non-mutating. For a usage or validation error proven to have made no change, correct the invocation from those documented sources and retry. Continue correcting and retrying while each failure is clearly non-mutating and provides actionable validation feedback; do not stop merely because an earlier correction revealed another issue. Stop and report when the failure may have partially changed state, is destructive, involves credentials or authorization, becomes ambiguous, or cannot be corrected from the documented interface. The only exception to source inspection is when the user's latest request explicitly asks to inspect, debug, review, or modify that helper script itself.
 
 ## User-facing language
 
@@ -222,7 +222,14 @@ Keep animations purposeful: entrance reveals, hover feedback, and user-initiated
 
 **Open in browser:**
 
-- `browser-use --session visual-explainer open file://$HOME/.agent/diagrams/filename.html`
+Resolve `$HOME/.agent/diagrams/filename.html` to an absolute path, then open it with the current Browser Use stdin interface:
+
+```bash
+BU_NAME=visual-explainer browser-use <<'PY'
+new_tab("file:///absolute/path/to/filename.html")
+print(page_info())
+PY
+```
 
 **Tell the user** the file path so they can re-open it.
 

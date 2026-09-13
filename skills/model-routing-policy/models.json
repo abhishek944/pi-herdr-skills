@@ -1,7 +1,42 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026-09-05",
+  "catalogVersion": "2026-09-12",
   "models": [
+    {
+      "modelId": "gpt-6-astra",
+      "provider": "openai-codex",
+      "family": "gpt-6",
+      "independenceGroup": "openai-codex:gpt-6",
+      "capabilities": {
+        "inputTypes": ["text", "image"],
+        "taskClasses": [
+          "coordination", "architecture", "implementation", "exploration",
+          "focused-edit", "multimodal", "integration", "review"
+        ],
+        "taskClassScores": {
+          "coordination": 5,
+          "architecture": 5,
+          "implementation": 5,
+          "exploration": 5,
+          "focused-edit": 5,
+          "multimodal": 5,
+          "integration": 5,
+          "review": 5
+        }
+      },
+      "thinking": {
+        "supportedLevels": ["low", "medium", "high", "xhigh", "max"],
+        "recommendedLevel": "medium"
+      },
+      "routing": {
+        "reviewTier": "expert",
+        "delegation": "review-or-exceptional-debugging",
+        "reviewComplexities": ["complicated"],
+        "reviewThinking": {
+          "complicated": "high"
+        }
+      }
+    },
     {
       "modelId": "gpt-5.6-sol",
       "provider": "openai-codex",
@@ -13,15 +48,21 @@
           "image"
         ],
         "taskClasses": [
+          "coordination",
           "architecture",
           "exploration",
+          "focused-edit",
+          "multimodal",
           "implementation",
           "integration",
           "review"
         ],
         "taskClassScores": {
+          "coordination": 5,
           "architecture": 5,
           "exploration": 5,
+          "focused-edit": 4,
+          "multimodal": 5,
           "implementation": 5,
           "integration": 5,
           "review": 5
@@ -39,7 +80,12 @@
         "recommendedLevel": "high"
       },
       "routing": {
-        "reviewTier": "strong"
+        "reviewTier": "strong",
+        "delegation": "routine",
+        "reviewComplexities": ["simple"],
+        "reviewThinking": {
+          "simple": "high"
+        }
       }
     },
     {
@@ -53,11 +99,21 @@
           "image"
         ],
         "taskClasses": [
+          "coordination",
+          "architecture",
+          "exploration",
+          "focused-edit",
+          "multimodal",
           "implementation",
           "integration",
           "review"
         ],
         "taskClassScores": {
+          "coordination": 4,
+          "architecture": 4,
+          "exploration": 4,
+          "focused-edit": 5,
+          "multimodal": 4,
           "implementation": 4,
           "integration": 4,
           "review": 4
@@ -75,7 +131,8 @@
         "recommendedLevel": "high"
       },
       "routing": {
-        "reviewTier": "standard"
+        "reviewTier": "standard",
+        "delegation": "routine"
       }
     },
     {

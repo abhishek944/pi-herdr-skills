@@ -3,8 +3,10 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 source_root="$repo_root/skills"
+extension_source="$repo_root/extensions/permission-gate.ts"
 agent_dir=${PI_CODING_AGENT_DIR:-"$HOME/.pi/agent"}
 destination="$agent_dir/skills"
+extension_destination="$agent_dir/extensions/permission-gate.ts"
 mode=install
 force=0
 dry_run=0
@@ -13,7 +15,7 @@ usage() {
   cat <<'EOF'
 Usage: scripts/install.sh [--force] [--dry-run] [--uninstall]
 
-Installs this repository's skills into Pi's global skill directory.
+Installs this repository's skills and permission gate into Pi's global agent directory.
 
   --dry-run    Show what would change.
   --force      Back up and replace conflicting skill directories.
@@ -35,6 +37,7 @@ for arg in "$@"; do
 done
 
 [[ -d "$source_root" ]] || { echo "Missing skills directory: $source_root" >&2; exit 1; }
+[[ -f "$extension_source" ]] || { echo "Missing extension: $extension_source" >&2; exit 1; }
 
 trees_equal() {
   python3 - "$1" "$2" <<'PY'
@@ -85,15 +88,27 @@ for name in "${skill_names[@]}"; do
   fi
 done
 
-if [[ ${#conflicts[@]} -gt 0 && $force -eq 0 ]]; then
-  printf 'Refusing to overwrite modified or different skills:\n' >&2
-  printf '  %s\n' "${conflicts[@]}" >&2
-  printf 'Review the differences, then rerun with --force to create a backup first.\n' >&2
-  exit 1
+extension_conflict=0
+if [[ -e "$extension_destination" || -L "$extension_destination" ]]; then
+  if [[ ! -f "$extension_destination" ]] || ! cmp -s "$extension_source" "$extension_destination"; then
+    extension_conflict=1
+  fi
+fi
+
+if [[ ${#conflicts[@]} -gt 0 || $extension_conflict -eq 1 ]]; then
+  if [[ $force -eq 0 ]]; then
+    printf 'Refusing to overwrite modified or different managed files:\n' >&2
+    if [[ ${#conflicts[@]} -gt 0 ]]; then
+      printf '  skill: %s\n' "${conflicts[@]}" >&2
+    fi
+    [[ $extension_conflict -eq 0 ]] || printf '  extension: permission-gate.ts\n' >&2
+    printf 'Review the differences, then rerun with --force to create a backup first.\n' >&2
+    exit 1
+  fi
 fi
 
 backup_root=""
-if [[ ${#conflicts[@]} -gt 0 ]]; then
+if [[ ${#conflicts[@]} -gt 0 || $extension_conflict -eq 1 ]]; then
   backup_parent="$agent_dir/skills-backups"
   if [[ $dry_run -eq 1 ]]; then
     backup_root="$backup_parent/pi-herdr-skills-<unique>"
@@ -104,6 +119,10 @@ if [[ ${#conflicts[@]} -gt 0 ]]; then
     for name in "${conflicts[@]}"; do
       cp -R -p "$destination/$name" "$backup_root/$name"
     done
+    if [[ $extension_conflict -eq 1 ]]; then
+      mkdir -p "$backup_root/extensions"
+      cp -R -p "$extension_destination" "$backup_root/extensions/permission-gate.ts"
+    fi
     echo "Backed up conflicts to: $backup_root"
   fi
 fi
@@ -119,6 +138,14 @@ if [[ $mode == uninstall ]]; then
       echo "Removed: $target"
     fi
   done
+  if [[ -e "$extension_destination" || -L "$extension_destination" ]]; then
+    if [[ $dry_run -eq 1 ]]; then
+      echo "Would remove: $extension_destination"
+    else
+      rm -rf -- "$extension_destination"
+      echo "Removed: $extension_destination"
+    fi
+  fi
   exit 0
 fi
 
@@ -143,5 +170,18 @@ for name in "${skill_names[@]}"; do
   mv "$staging" "$target"
   echo "Installed: $name"
 done
+
+if [[ -f "$extension_destination" ]] && cmp -s "$extension_source" "$extension_destination"; then
+  echo "Already current: permission-gate.ts"
+elif [[ $dry_run -eq 1 ]]; then
+  echo "Would install: permission-gate.ts -> $extension_destination"
+else
+  mkdir -p "$(dirname "$extension_destination")"
+  extension_staging="$extension_destination.$$"
+  cp -p "$extension_source" "$extension_staging"
+  rm -rf -- "$extension_destination"
+  mv "$extension_staging" "$extension_destination"
+  echo "Installed: permission-gate.ts"
+fi
 
 echo "Done. Restart Pi or run /reload in an existing Pi session."

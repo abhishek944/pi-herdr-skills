@@ -8,7 +8,7 @@ var/<feature-name>/implement/state.json
 
 Large recordings, reports, transcripts, and patches remain under the same run folder and are referenced from the JSON. They are evidence, not competing state stores.
 
-Agents must never edit `state.json` directly. Every mutation goes through `scripts/state-store.py`, which locks the file, authenticates the acting task, checks the coordinator lease when the root acts, validates root-wide limits and transitions, increments the revision, and replaces the JSON atomically.
+Agents must never edit `state.json` directly. Every mutation goes through `scripts/state-store.py`, which locks the file, checks the immutable acting task ID, checks the coordinator lease when the root acts, validates root-wide limits and transitions, increments the revision, and replaces the JSON atomically.
 
 ## Run folder
 
@@ -18,26 +18,22 @@ var/<feature-name>/implement/
   .state.lock
   evidence/
   outputs/
-  reviews/
-  evidence-index.md
+var/<feature-name>/reviews/
 ```
 
 The folder and state file may not be symbolic links or escape the repository root. `var/` must be ignored by Git. The helper rejects copied state outside this exact canonical location.
 
-## Credentials are not state
+## Task identity and coordinator lease
 
-Each task has a capability hash in `state.json`. The raw capability is returned once when the task is created and passed only to that agent. The root capability is the owner token printed during initialization.
+Tasks are identified by immutable task IDs and constrained by their recorded lineage, status, parent-owned contract, recorded Pi session identity, and atomic transition rules. The state helper matches each descendant mutation to that task's launched Pi session.
 
-The root also needs the active coordinator lease ID. Raw capabilities are runtime credentials, not state or evidence. Never write them into `state.json`, prompts saved as artifacts, reports, logs, or user-facing output.
-
-Root commands use:
+The root also needs the active coordinator lease ID and must run from the Pi session recorded at initialization. Together they prevent another or stale coordinator session from taking over an active run. Root commands use:
 
 ```bash
-export IMPLEMENT_TASK_CAPABILITY='<root-owner-token>'
 export IMPLEMENT_COORDINATOR_LEASE_ID='<coordinator-lease-id>'
 ```
 
-A child receives only its own task capability. It does not receive the root lease.
+Children receive their task IDs but not the root lease. Their state updates must come from the Pi session recorded when their runtime launched. Root-only events require both the recorded coordinator session and matching unexpired lease.
 
 ## Version 4 shape
 
@@ -75,8 +71,7 @@ A child receives only its own task capability. It does not receive the root leas
       "max_depth": 2,
       "max_children_per_task": 6,
       "max_total_tasks": 18,
-      "max_active_agents": 6,
-      "max_retries_per_task": 31
+      "max_active_agents": 6
     },
     "active_agent_slots": ["task-0002"],
     "model_catalog": {
@@ -105,7 +100,6 @@ A child receives only its own task capability. It does not receive the root leas
   "tasks": {
     "task-0001": {
       "id": "task-0001",
-      "capability_hash": "<sha256>",
       "parent_id": null,
       "root_id": "task-0001",
       "depth": 0,
@@ -194,13 +188,25 @@ Statuses are `pending`, `working`, `done`, `blocked`, or `cancelled`. A done tod
 - ready dependencies are done;
 - an active slot is reserved atomically for immediate launch, or the child is explicitly queued.
 
-Hard ceilings are depth 2, six immediate children, eighteen total tasks, six active descendant agents, and 32 candidate attempts per task. Editing the JSON cannot raise them. Maximum-depth and review tasks are always leaves. A confirmed no-contribution automatic-model failure advances the same immutable task through the atomic `prepare-fallback` event; the event appends the stopped attempt to `runtime_history`, validates cumulative routing and cleanup evidence, and reserves a fresh runtime slot without consuming a logical-child slot.
+Hard ceilings are depth 2, six immediate children, eighteen total tasks, and six active descendant agents. Editing the JSON cannot raise them. Automatic fallback has no fixed retry-count ceiling; cumulative exclusions and routing-zone exhaustion determine when no candidate remains. Maximum-depth and review tasks are always leaves. A confirmed no-contribution automatic-model failure advances the same immutable task through the atomic `prepare-fallback` event; the event appends the stopped attempt to `runtime_history`, validates cumulative routing and cleanup evidence, and reserves a fresh runtime slot without consuming a logical-child slot.
 
-`add-child` returns the child task ID and raw child capability. Pass the raw capability to that child, then discard it from coordinator artifacts. If an inactive, unproductive child's capability is lost during recovery, its parent or the root may rotate it; the old hash remains in audit history.
+`add-child` returns the child task ID and slot-reservation result. Pass the immutable task ID and parent-owned contract to the child. Recovery uses recorded task, runtime, session, intent, and resource identities.
 
 ## Model routing
 
-The Pi-global model catalog is bound by its path and SHA-256 digest, and its validated version plus model contents are snapshotted into state. Bindings require the approved versioned object with `schemaVersion`, `catalogVersion`, and a non-empty `models` list. Each model requires structured `capabilities.inputTypes`, `capabilities.taskClasses`, `thinking.supportedLevels`, `thinking.recommendedLevel`, and `routing.reviewTier` metadata. New launches require the live catalog to match the complete snapshot. Later catalog drift blocks launches but does not prevent cleanup, cancellation, or recovery state updates.
+The Pi-global model catalog is bound by its path and SHA-256 digest, and its validated version plus model contents are snapshotted into state. Bindings require the approved versioned object with `schemaVersion`, `catalogVersion`, and a non-empty `models` list. Each model requires structured `capabilities.inputTypes`, `capabilities.taskClasses`, `thinking.supportedLevels`, `thinking.recommendedLevel`, and `routing.reviewTier` metadata. Review-capable delegated models also declare `routing.reviewComplexities` and optional `routing.reviewThinking`. New launches require the live catalog to match the complete snapshot. Later catalog drift blocks launches but does not prevent cleanup, cancellation, or recovery state updates.
+
+Routing honors the catalog's optional `routing.delegation` field: `routine`
+(Sol/Terra), `review-or-exceptional-debugging` (Astra), `exceptional-debugging`
+(exploration-only), or `baseline-only` (the default for other catalog entries).
+Caller and contributor entries remain valid baselines even when they cannot be
+delegated. `request.exceptionalDebuggingReason` is normally null; an
+evidence-backed exception is exploration-only and must remain unchanged through
+fallback and launch verification. Routing artifacts are validated directly from their content and bound catalog
+evidence.
+Astra reviews need no debugging exception, are limited to complicated review, and
+use exactly high thinking. Availability failures do not unlock Astra for other
+routine work.
 
 Task classes are:
 
@@ -212,6 +218,10 @@ Task classes are:
 - `multimodal`
 - `review`
 - `integration`
+
+Review routing also records `request.reviewComplexity` as `simple` or
+`complicated`. Catalog metadata routes simple review only to Sol and complicated review only to
+Astra, both at exactly `high` thinking.
 
 A model selection records:
 
@@ -232,7 +242,7 @@ A model selection records:
 }
 ```
 
-Every model selection is bound to the preserved resolver artifact and its pre-launch digest. The selected model and recorded caller must exist in the bound catalog and declare their thinking levels. The selected model must support the recorded `input_types` and task class. Review selections record the current caller and every contributor in `reviewer_escalation.baselines` and must select a strictly stronger reviewer. A selection is immutable within one attempt. A model-specific failure with no usable contribution may advance only through `prepare-fallback`, which requires the new resolution to bind the active prior resolution, verified launch, complete runtime output, exact closed-resource response, unchanged routing zone, and exactly the prior selected model added to cumulative exclusions. Prompt dispatch is recorded separately from usable contribution: an immediate provider failure may occur after dispatch, but any recorded tool/file/result contribution, side effect, ambiguous output, or unclosed/preserved resource forbids fallback. Every other resolution or launch failure blocks after cleanup. Before a runtime becomes working or receives a prompt, a digest-bound verifier artifact must match the active resolution, bound start response, catalog digest, and immutable session identity. Attempt history preserves every earlier selection, resolution, session, failure, output, and cleanup artifact.
+Every model selection is bound to the preserved resolver artifact and its pre-launch digest. The selected model and recorded caller must exist in the bound catalog and declare their thinking levels. The selected model must support the recorded `input_types` and task class. Required independent-review selections record the current caller and every contributor in `reviewer_escalation.baselines`. Complicated review must select an Astra-high reviewer that is strictly stronger than the combined baseline. Simple changes normally create no reviewer selections; an explicitly requested simple review records simple complexity and resolves to a fresh, no-weaker Sol-high peer. A selection is immutable within one attempt. A model-specific failure with no usable contribution may advance only through `prepare-fallback`, which requires the new resolution to bind the active prior resolution, verified launch, complete runtime output, exact closed-resource response, unchanged routing zone, and exactly the prior selected model added to cumulative exclusions. Prompt dispatch is recorded separately from usable contribution: an immediate provider failure may occur after dispatch, but any recorded tool/file/result contribution, side effect, ambiguous output, or unclosed/preserved resource forbids fallback. Every other resolution or launch failure blocks after cleanup. Before a runtime becomes working or receives a prompt, a digest-bound verifier artifact must match the active resolution, bound start response, catalog digest, and immutable session identity. Attempt history preserves every earlier selection, resolution, session, failure, output, and cleanup artifact.
 
 ## Atomic updates
 
@@ -244,10 +254,9 @@ python3 <skill-root>/scripts/state-store.py events
 
 ### Exact root bootstrap sequence
 
-After `init-state.sh` succeeds, export the printed root credentials and use these event names and payload shapes in order:
+After `init-state.sh` succeeds, export the printed coordinator lease and use these event names and payload shapes in order:
 
 ```bash
-export IMPLEMENT_TASK_CAPABILITY='<root-owner-token>'
 export IMPLEMENT_COORDINATOR_LEASE_ID='<coordinator-lease-id>'
 STATE='var/<feature-name>/implement/state.json'
 STORE='<skill-root>/scripts/state-store.py'
@@ -275,7 +284,7 @@ python3 "$STORE" apply "$STATE" --actor task-0001 \
 
 `set-run` owns `run.user_goal`; `update-contract` owns the root task's title, outcome, acceptance criteria, boundaries, inputs, and expected result. There is no `set-root-contract` event.
 
-`apply` writes the state file only after the complete event validates. If it rejects an unknown event, malformed payload, or invalid transition, the state file remains unchanged. For those clearly non-mutating usage errors, consult `events`, correct the invocation, and retry once. Do not retry credential or authorization failures, malformed existing state, ambiguous failures, or any command that may have produced an external side effect.
+`apply` writes the state file only after the complete event validates. If it rejects an unknown event, malformed payload, or invalid transition, the state file remains unchanged. For those clearly non-mutating usage errors, consult `events`, correct the invocation, and retry. Continue correcting and retrying while each rejection remains clearly non-mutating and actionable. Do not retry credential or authorization failures, malformed existing state, ambiguous failures, or any command that may have produced an external side effect.
 
 Read state:
 
@@ -284,10 +293,9 @@ python3 <skill-root>/scripts/state-store.py show \
   var/<feature-name>/implement/state.json --task task-0002
 ```
 
-Apply a child update:
+Apply a child update using its immutable task ID:
 
 ```bash
-IMPLEMENT_TASK_CAPABILITY='<child-capability>' \
 python3 <skill-root>/scripts/state-store.py apply \
   var/<feature-name>/implement/state.json \
   --actor task-0002 \
@@ -301,13 +309,15 @@ python3 <skill-root>/scripts/state-store.py validate \
   var/<feature-name>/implement/state.json
 ```
 
-Event families cover run configuration and phase transitions, root contract updates, parent-owned child replanning, todos, children, frozen model selection, agent slots, runtime records, typed `record-pane-readiness` evidence, resources, results, task transitions, two-phase cancellation, typed integration updates, final certification, and completion.
+Event families cover run configuration and phase transitions, root contract updates, parent-owned child replanning, todos, children, frozen model selection, agent slots, runtime records, typed `record-pane-readiness` evidence, resources, results, task transitions, two-phase cancellation, typed integration updates and completion.
 
 ## Runtime ownership
 
 Before an external create, the delegating task partitions ordered child assignments into groups of at most four and records one owned tab per group. Each group uses the Herdr skill's fixed 2x2 split order. The coordinator validates the live pane count and layout before accepting each create response; a fifth pane or out-of-order split is a workflow failure and must not proceed to launch. Additional children require another tab; for example, a six-child wave uses a four-pane tab and a two-pane tab. Every tab remains a separate owned resource with its own create and cleanup evidence. Pane geometry is live Herdr evidence governed by the Herdr workflow contract; the durable state store tracks ownership and lifecycle, not terminal geometry. Every newly bound pane or agent resource records its exact owned `parent_tab_id`. When an owned tab close cascade-deletes those resources, settle the tab first, then settle each child resource with the same digest-bound `cli:tab:close` artifact and reason `cascade-deleted-with-owned-tab`; validation requires the matching closed parent tab and digest.
 
-Before an external create, the delegating task records a unique runtime intent, target task, runtime name, and output artifact under `outputs/`. The Herdr JSON create response is redirected to that artifact before IDs are parsed. Binding rechecks output-folder containment, verifies its digest, parses the saved JSON at the intent's declared response-ID path, and requires that ID and resource kind to match. For a pane, pass the persisted pre-create intent timestamp to the Herdr readiness classifier and persist the canonical 30-second deadline it derives from that single clock anchor; never calculate the deadline from a second clock read. Every valid process snapshot and classifier result is preserved as readiness evidence, including the classifier's `observedAt`; observations must be monotonic across rechecks, and resume never restarts that budget. Helper validation failures that cannot provide a valid deadline are preserved as generic failure artifacts and cleaned up before any readiness-state event. A `ready`, `expired`, or `ambiguous` probe is terminal; validation rejects every historical or new probe that follows it. If deadline derivation exceeds the timestamp range, the classifier returns `ambiguous` with the maximum representable deadline; record that terminal probe, then clean up instead of launching. Agent intents are single-use per attempt and may launch only their declared direct-child target. An `agent_pane_busy` response after a ready proof means the certified process state changed before launch. Preserve it as a digest-bound artifact under `outputs/` and reference it from task result/blocker evidence, but fail closed without retry: do not submit another readiness probe or reuse the pane or intent, and follow the normal cleanup path. This leaves durable recovery evidence even if the coordinator stops between create and state binding.
+During bounded pane warm-up, startup helpers may appear, exit, or replace one another while the pane ID and shell PID remain stable. These transitions remain `busy`; only a sole-shell snapshot becomes `ready`. The 300-second deadline limits readiness attainment and does not expire a ready proof while synchronized agent launches are being bound. Herdr's live `agent start` busy-pane check remains authoritative after readiness.
+
+Before an external create, the delegating task records a unique runtime intent, target task, runtime name, and output artifact under `outputs/`. The Herdr JSON create response is redirected to that artifact before IDs are parsed. Binding rechecks output-folder containment, verifies its digest, parses the saved JSON at the intent's declared response-ID path, and requires that ID and resource kind to match. For a pane, pass the persisted pre-create intent timestamp to the Herdr readiness classifier and persist the canonical 300-second deadline it derives from that single clock anchor; never calculate the deadline from a second clock read. Every valid process snapshot and classifier result is preserved as readiness evidence, including the classifier's `observedAt`; observations must be monotonic across rechecks, and resume never restarts that budget. Helper validation failures that cannot provide a valid deadline are preserved as generic failure artifacts and cleaned up before any readiness-state event. A `ready`, `expired`, or `ambiguous` probe is terminal; validation rejects every historical or new probe that follows it. If deadline derivation exceeds the timestamp range, the classifier returns `ambiguous` with the maximum representable deadline; record that terminal probe, then clean up instead of launching. Agent intents are single-use per attempt and may launch only their declared direct-child target. An `agent_pane_busy` response after a ready proof means the certified process state changed before launch. Preserve it as a digest-bound artifact under `outputs/` and reference it from task result/blocker evidence, but fail closed without retry: do not submit another readiness probe or reuse the pane or intent, and follow the normal cleanup path. This leaves durable recovery evidence even if the coordinator stops between create and state binding.
 
 Runtime records bind the task to:
 
@@ -338,129 +348,90 @@ A cancelling task is not complete and its slot cannot be reused. Successful task
 
 ## Integration state
 
-Before reviewer launch, the root writes `contract-review-pack.json` and `evidence/contract-preflight.json` in the canonical run folder. The global Agent Review validator recomputes discovery, exact resolved/deferred branch coverage, current evidence, feature name, and review fingerprint. Both files are digest-bound certification artifacts.
-
-The root records the complete final contract:
+The root records a small final integration summary:
 
 ```json
 {
   "test_verdict": "pass",
   "skipped_reason": null,
-  "test_target_fingerprint": "…",
+  "test_evidence": ["npm run check passed"],
   "behavior_verdict": "user-pending",
-  "behavior_reason": "The user owns live interactive end-to-end testing.",
-  "behavior_target_fingerprint": "…",
-  "behavior_evidence": [
-    {
-      "case_type": "user-handoff",
-      "artifact": "evidence/manual-live-test.md",
-      "fingerprint": "…"
-    }
-  ],
-  "evidence_target_fingerprint": "…",
-  "evidence_index": "var/example-feature/implement/evidence-index.md",
+  "behavior_reason": "The user owns the live interactive check.",
+  "behavior_evidence": ["evidence/manual-live-test.md"],
   "changed_files": ["src/example.ts"],
-  "collisions": [
-    {
-      "tasks": ["task-0002", "task-0003"],
-      "files": ["src/shared.ts"],
-      "status": "resolved",
-      "resolution": "Root integrated both behaviors",
-      "rerun_evidence": ["Combined check passed"]
-    }
-  ],
+  "collisions": [],
+  "review_requirement": {
+    "classification": "complicated",
+    "source": "automatic",
+    "required": true,
+    "reason": "The change crosses a security-sensitive workflow boundary."
+  },
   "review_verdict": "pass",
   "review_execution": "independent",
   "review_wave": 2,
-  "review_scope": {
-    "base_sha": "…",
-    "target_ref": "WORKTREE",
-    "target_sha": null,
-    "paths": ["src"]
-  },
-  "review_target_fingerprint": "…",
-  "review_wave_fingerprint": "…",
-  "review_waves": [
-    {
-      "wave": 2,
-      "fingerprint": "…",
-      "status": "complete",
-      "started_at": "…",
-      "reviewer_instance_ids": [
-        "immutable-session-a",
-        "immutable-session-b",
-        "immutable-session-c"
-      ]
-    }
+  "minimum_review_wave": 2,
+  "review_resources": [
+    {"kind": "tab", "id": "workspace:tab", "status": "closed"}
   ],
   "review_perspectives": {
     "correctness_safety": {
       "agent_id": "reviewer-a",
-      "agent_instance_id": "immutable-session-a",
+      "agent_instance_id": "pi-session-a",
       "provider": "example-provider",
       "model_id": "example-reviewer",
       "thinking_level": "high",
-      "resolution_artifact": {
-        "path": "outputs/reviewer-a-resolution.json",
-        "digest": "<sha256>"
-      },
-      "start_response_artifact": {
-        "path": "outputs/reviewer-a-start.json",
-        "digest": "<sha256>"
-      },
-      "verification_artifact": {
-        "path": "outputs/reviewer-a-verification.json",
-        "digest": "<sha256>"
-      },
       "status": "complete",
-      "started_at": "…",
-      "deadline_at": "…",
-      "output_path": "reviews/wave-2-correctness.md"
+      "output_path": "var/example-feature/reviews/wave-2-correctness.md"
+    },
+    "architecture_integration": {
+      "agent_id": "reviewer-b",
+      "agent_instance_id": "pi-session-b",
+      "provider": "example-provider",
+      "model_id": "example-reviewer",
+      "thinking_level": "high",
+      "status": "complete",
+      "output_path": "var/example-feature/reviews/wave-2-architecture.md"
+    },
+    "regression_fix_quality": {
+      "agent_id": "reviewer-c",
+      "agent_instance_id": "pi-session-c",
+      "provider": "example-provider",
+      "model_id": "example-reviewer",
+      "thinking_level": "high",
+      "status": "complete",
+      "output_path": "var/example-feature/reviews/wave-2-regression.md"
     }
   },
-  "review_findings": [
-    {
-      "id": "finding-1",
-      "severity": "P2",
-      "status": "resolved",
-      "resolution": "Fixed and rechecked"
-    }
-  ],
-  "combined_report_path": "reviews/wave-2-combined.md",
-  "certification": null,
+  "review_findings": [],
+  "combined_report_path": "var/example-feature/reviews/wave-2-summary.md",
   "finished_at": null
 }
 ```
 
-`changed_files` must exactly match the root's surviving integrated-file result and the worktree delta from the initial snapshot, including file type and mode. Child file lists remain historical and drive collision derivation without forcing reverted edits into the final list. The review base must equal the run base, and every changed file must be inside scope. Every sibling file overlap requires a collision entry resolved with rerun evidence. Review-wave history is append-only and increasing. Reviewer instance IDs must be unique, distinct from all productive/file-changing contributors and coordinator instances, and unused by earlier waves. Current and historical coordinator model settings are preserved and required in every reviewer baseline. Every perspective must preserve its provider/model/thinking choice, stronger-baseline resolution, Herdr Pi start response, and launch-verification artifact with live SHA-256 digests. Certification rechecks those proofs and requires every implementation contributor in each resolution baseline. If independent review cannot run, completion is blocked.
+`review_requirement` records why review ran or why it was unnecessary. An automatically classified simple change uses `review_execution: not-required`, `review_verdict: not-required`, wave zero, and no review reports. Simple may include localized user-visible work across several closely related files when it follows an established pattern, remains low risk, and direct inspection plus normal checks are sufficient. Substantial features, complicated changes, and explicit review requests use three fresh read-only perspectives.
 
-Each reviewer report contains exact markers:
+The helper-owned, non-decreasing `minimum_review_wave` prevents a reviewed wave from being reused after rework. `review_resources` retains only owned review-tab IDs and open/closed cleanup status; it does not retain model-resolution or launch-check output. Record the tab immediately after creation and close it in state only after Herdr confirms absence. Resource IDs cannot be removed or reopened; recovery permits closure-only updates.
 
-```text
-Fingerprint: <current-fingerprint>
-Contract pack: <contract-pack-sha256>
-Contract preflight: <preflight-output-sha256>
-Review wave: <number>
-Reviewer: <agent-id>
-Finding IDs: finding-1, finding-2
-```
+Review reports are deliberately human-readable history. Each perspective report ends with the exact reviewer instance, provider/model, thinking level, `Finding IDs`, and verdict lines. The current reviewers must be three different fresh Pi sessions and must not be coordinators, implementation contributors, or reviewers from an earlier wave. The summary ends with `Finding IDs` and verdict lines after recording accepted, rejected, and unresolved findings. If implementation changes after a review, preserve the old wave, return through execution so review state is invalidated, and run a new wave.
 
-Use `Finding IDs: none` when clean. Structured `review_findings` must exactly match the IDs declared across reports, and every finding must be resolved or rejected with a reason. The combined report contains the fingerprint, contract-pack digest, preflight digest, and wave markers. Certification recomputes contract discovery and evidence validation before accepting these markers.
+`changed_files` must match the root's surviving worktree delta from the initial snapshot. Every sibling overlap requires a collision entry, and every collision must be resolved with rerun evidence before completion.
 
-Automated tests may be skipped only with a reason. A passing test verdict requires current digest-bound test evidence under the run evidence folder. Live interactive behavior verification is separate and user-owned unless the latest request explicitly asks an agent to run it. Use `user-pending` with one current `user-handoff` artifact and a clear reason; this allows implementation closeout without claiming a live pass. An explicitly requested agent-run pass requires current happy, error, and edge artifacts inside the run evidence folder. `not-applicable` is accepted only for a documented documentation-only change whose surviving files are Markdown, text, or reStructuredText. Missing runtime, authentication, fixtures, or credentials blocks only an explicitly requested agent-run test—not a normal user-owned handoff.
+Checks and behavior evidence may be short descriptions or paths to readable, nonempty supporting files. Path-shaped strings and declared `path` or `artifact` fields must resolve inside the repository. A passing check or behavior verdict requires at least one readable entry. A skipped check requires a reason. User-owned live verification requires both a reason and a usable handoff entry; it remains pending honestly and is not treated as passed.
 
-## Certification and completion
+## Validation and completion
 
-After all integration fields and reports are current, run:
+Validate the final state directly:
 
 ```bash
-bash <skill-root>/scripts/validate-integration-review.sh <feature-name> --certify
+bash <skill-root>/scripts/validate-integration-review.sh <feature-name>
 ```
 
-Certification is bound to the exact state revision, live fingerprint, actual run-owned worktree delta, recomputed contract preflight, and SHA-256 digests of the contract pack, preflight output, distinct review, behavior, runtime-response, and productive-task-output artifacts. Any later state change clears it. `complete-run` recomputes the live fingerprint, worktree delta, contract preflight, and every artifact digest as its final gate before atomically completing the root and run.
+The validator checks current state, the live changed-file list, settled checks and behavior status, resolved collisions, and the required readable review files.
+
+After validation, apply `complete-run`. Completion performs the same live checks while holding the state lock, requires all todos and descendants to be settled, requires all runtime resources to be closed, and then marks the root and run complete.
 
 ## Resume
 
-Resume reads the owner token and lease ID only from protected environment variables. Ordinary root updates require an unexpired matching lease. Expired takeover requires a fresh lease ID, creates a new coordinator instance, and fences the old one. When live runtime exists, takeover persists `reconciliation_required`; only recovery and cleanup events are accepted until the root records reconciliation evidence. Rotate lost child capabilities only for inactive, unproductive tasks.
+Resume reads the coordinator lease ID from the environment. Ordinary root updates require an unexpired matching lease. Expired takeover requires a fresh lease ID, creates a new coordinator instance, and fences the old one. When live implementation runtime or an open final-review tab exists, takeover persists `reconciliation_required`; only recovery and cleanup events are accepted until the root closes recorded review tabs and records reconciliation evidence. Descendant recovery remains bound to recorded task and runtime identities.
 
-Version 3 state is never migrated or resumed automatically. Finish it with the earlier one-level workflow or start a separately named version 4 run.
+A version 4 state created before Pi-session ownership was introduced may bind its still-active matching lease to the current Pi session once during resume; later mismatches fail closed. Version 3 state is never migrated or resumed automatically. Finish it with the earlier workflow or start a separately named version 4 run.
