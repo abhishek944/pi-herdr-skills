@@ -64,10 +64,10 @@ If an installed skill was modified, uninstall refuses to remove it unless you ad
 | `commit-and-merge` | Commits real changes and merges into the default branch when explicitly requested. |
 | `design-council` | Compares architecture, API, workflow, and product-design options without editing. |
 | `discuss` | Investigates and debugs a repository without applying a fix. |
-| `grill-me` | Challenges a plan through a browser-based decision interview. |
+| `grill-me` | Challenges a plan one decision at a time and records the answers. |
 | `herdr` | Controls Herdr panes and Herdr-hosted Pi agents when a workflow authorizes it. |
-| `implement` | Coordinates implementation with task state, Herdr delegation, checks, and review. |
-| `model-routing-policy` | Selects and verifies provider, model, and thinking settings for delegated Pi agents. |
+| `implement` | Coordinates implementation with a short written plan, checks, and proportionate review. |
+| `model-routing-policy` | Selects explicit provider, model, and thinking settings for delegated Pi agents. |
 | `no-unit-tests` | Prevents unit-test creation or execution unless the user explicitly requests it. |
 | `plainspoken-responses` | Keeps user-facing replies clear, friendly, and easy to follow. |
 | `read-flows` | Finds and reads repository flow documentation before relevant changes. |
@@ -76,13 +76,26 @@ If an installed skill was modified, uninstall refuses to remove it unless you ad
 
 Some skills depend on other skills in this repository. Install the complete set rather than copying only `implement`, `agent-review`, or `design-council`.
 
+### Session coordination
+
+The work-owning skills share one concise coordination rule when the corresponding extensions are loaded:
+
+- **Work** is the overall outcome and is managed with `WorkCreate`, `WorkList`, `WorkUpdate`, and `WorkDelete` from `pi-tasks`.
+- **Todo** is a concrete step belonging to a work and is managed with `TodoCreate`, `TodoList`, `TodoUpdate`, and `TodoDelete`.
+- **Monitor** runs one long-lived background command through `MonitorCreate`, `MonitorList`, `MonitorUpdate`, and `MonitorStop` from `pi-loop-monitor`.
+- **Loop** schedules a future, recurring, event-driven, or idle continuation through `LoopCreate`, `LoopList`, `LoopUpdate`, and `LoopDelete`.
+
+Works and todos stay current as normal work progresses. Monitors are used only for background commands, and loops only when a later or repeated wake is needed. None of these records are changed during `/ask` or `/btw`.
+
+When a skill needs to retain notes, screenshots, reports, or HTML, it writes to `var/<feature-name>/<skill-name>-details/` in the working repository.
+
 ## Included extension
 
 `extensions/permission-gate.ts` blocks catastrophic or ambiguous shell operations and asks for explicit confirmation before other destructive commands. In Pi's TUI, it emits balanced `herdr:blocked` open/close events around each confirmation; the Herdr integration counts overlapping waits so connected interfaces remain in their permission-waiting state until every dialog closes. Print and JSON modes reject confirmation-covered commands without prompting. RPC mode can request confirmation, but its wait is not reported as a Herdr pet state. An exact recursive-deletion target outside the current project may proceed only after confirmation in an interactive Pi session. Broad targets, parent traversal, filesystem or home roots, protected system roots, and credential-sensitive paths remain blocked.
 
 ### Browser workflow prerequisite
 
-`browser-use` and the automated capture steps in `ui-ux-grill-me` require the current Browser Use CLI. Human question and comparison pages in `grill-me` and `ui-ux-grill-me` open through the operating system's visible default browser instead; on macOS they use `open` and never Browser Use.
+`browser-use` and browser-based visual work require the current Browser Use CLI.
 
 ```bash
 uv tool install --python 3.12 --upgrade --force browser-use
@@ -138,7 +151,7 @@ The implementation and review workflows require Herdr-hosted Pi agents.
    herdr integration status
    ```
 
-The agent workflows never silently weaken their requirements. A newly created pane may briefly remain busy while its shell finishes startup; the workflows wait through that bounded warm-up, including sequential environment hooks and activation helpers, before declaring setup failed. The readiness deadline is derived from the single persisted pre-create timestamp, limits only readiness attainment, and does not expire an already-ready proof while the synchronized agent batch launches. Workflow tabs are capped at four panes and use a 2x2 layout; larger agent batches spill into additional tabs in groups of four. When automatic routing hits a model-specific quota or availability failure before any useful work, they try another eligible catalog model with the same task, quality, input, thinking, and review requirements. Explicit user model choices, Herdr setup failures that remain after readiness recovery, uncertain partial work, exhausted candidates, and launch-verification failures still stop safely. Read the [Herdr agent guide](https://herdr.dev/agent-guide.md) for concepts and controls.
+The skills use Herdr directly. They keep at most four panes per tab, name every work pane, wait for a clean interactive shell, pass explicit Pi model settings, collect the result, and close only resources they created. Read the [Herdr agent guide](https://herdr.dev/agent-guide.md) for concepts and controls.
 
 ### Subagent model policy
 
@@ -190,14 +203,14 @@ Package-provided skills, such as the image-generation skill, remain owned and up
 - Keep credentials in environment variables or provider login stores, never in skills or examples.
 - Do not commit Pi settings, sessions, Herdr configuration, generated `var/` evidence, package caches, or `node_modules/`.
 - Review upstream extension release notes before updating pinned versions.
-- Check executable helper scripts as carefully as extensions.
-- Preserve executable file modes when copying or packaging skills.
+- Keep skill instructions concise and easy to audit.
+- Preserve file modes when copying or packaging skills.
 - Third-party names and links are informational; see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Repository layout
 
 ```text
-skills/                 Pi skill directories and their supporting files
+skills/                 Pi skill directories
 extensions/             Pi command-safety extensions
 skills-manifest.json    Exact skill file checksums and executable modes
 scripts/install.sh      Conflict-safe global installer and uninstaller

@@ -1,94 +1,48 @@
 ---
 name: commit-and-merge
-description: "Manual-invoke only. Commit the repository's real changes while leaving temporary artifacts uncommitted, then merge the current branch into the repository's default branch with user-guided conflict resolution. Never run unless the user explicitly asks to commit and merge."
+description: "Manual-invoke only. Commit requested repository changes and merge the current branch into the default branch."
 compatibility: Requires a Git repository.
 disable-model-invocation: true
 ---
 
-## Helper-script boundary
-
-Treat files inside any skill's `scripts/` directory as opaque executables during normal use. Never read, search, quote, summarize, or infer behavior from their source. Use only interfaces documented in `SKILL.md`, its references, or the helper's documented self-description command. If a helper fails, first determine from its response and documented interface whether the failure was clearly non-mutating. For a usage or validation error proven to have made no change, correct the invocation from those documented sources and retry. Continue correcting and retrying while each failure is clearly non-mutating and provides actionable validation feedback; do not stop merely because an earlier correction revealed another issue. Stop and report when the failure may have partially changed state, is destructive, involves credentials or authorization, becomes ambiguous, or cannot be corrected from the documented interface. The only exception to source inspection is when the user's latest request explicitly asks to inspect, debug, review, or modify that helper script itself.
-
-Resolve `<skill-root>` to the directory containing this `SKILL.md`. Work from the repository root unless the project says otherwise.
-
-## User-facing language
-
-Before every commentary or final response, read `../plainspoken-responses/SKILL.md`.
-
 # Commit and Merge
 
-Use only when the user explicitly asks to commit current work and merge it.
+Use only when the user explicitly asks to commit and merge.
 
-## Core rules
+Before replying to the user, follow the global `plainspoken-responses` skill.
 
-1. Read the repository's instructions and recent commit history before staging.
-2. Commit all real project changes that belong to the requested work.
-3. Leave logs, caches, generated previews, recordings, scratch scripts, and other temporary artifacts uncommitted unless the repository intentionally tracks them.
-4. Ask before excluding any ambiguous file.
-5. Never discard changes, rewrite history, skip hooks, force-push, or push at all unless the user explicitly asks.
-6. Do not start unrelated testing during this workflow. Use existing verification evidence and allow normal commit hooks to run.
-7. Preserve unrelated user changes and staged work.
+## Session coordination
 
-## Procedure
+When available, use `WorkCreate`/`WorkUpdate` and `TodoCreate`/`TodoUpdate` to keep the relevant session work and todos current. Use `MonitorCreate` only for a long-running background command and `LoopCreate` only for a future or repeated wake. Never change works, todos, loops, or monitors during `/ask` or `/btw`.
 
-### 1. Inspect
+## Rules
 
-Run read-only Git checks:
+- Read repository instructions, status, diffs, branch information, and recent commit style first.
+- Commit only the requested project work.
+- Leave temporary artifacts and unrelated user changes untouched.
+- Ask before excluding an ambiguous changed file.
+- Never discard work, rewrite history, skip hooks, force-push, or contact a remote without permission.
+- Do not guess through merge conflicts.
 
-- working-tree status;
-- staged and unstaged diffs;
-- diff summary;
-- current branch and worktrees;
-- recent commit messages;
-- configured default branch, preferring the remote default and then common local names.
+## Workflow
 
-Read repository instructions that govern generated files, tests, commits, or release branches.
+1. Identify the requested commit set and the repository's actual default branch.
+2. Recheck the staged diff and run only required checks.
+3. Commit with a concise message matching repository style.
+4. If already on the default branch, report that no merge is needed.
+5. Otherwise merge safely into the default branch without pulling or rebasing unless authorized.
+6. If conflicts occur, stop, explain them, and wait for the user's decision.
 
-### 2. Choose the commit set
+## Files
 
-Classify every changed file as:
+If a written record is useful, write only under:
 
-- requested project work;
-- unrelated user work;
-- temporary artifact;
-- ambiguous.
+```text
+var/<feature-name>/commit-and-merge-details/
+```
 
-Stage only requested project work. Do not disturb unrelated staged files. If the intended commit cannot be isolated safely, stop and ask the user.
+Do not commit this folder unless the repository explicitly tracks `var/`.
 
-### 3. Verify and commit
+## Final response
 
-1. Recheck the staged diff.
-2. Run only checks required by the repository or the user's request.
-3. Draft a concise message that matches recent repository style.
-4. Commit without bypassing hooks.
-5. If hooks modify files, inspect those changes before staging them. Do not amend unless it is safe and clearly part of this same commit attempt.
-
-### 4. Merge into the default branch
-
-1. Determine the repository's actual default branch; do not assume it is named `main`.
-2. If the current branch is already the default branch, report that no merge is needed.
-3. If the default branch is checked out in another clean worktree, merge there.
-4. Otherwise switch safely, update according to repository policy, and merge the committed branch.
-5. Do not pull, rebase, or contact a remote when the repository or user has not authorized it.
-
-## Conflicts
-
-If a merge conflict occurs:
-
-1. Stop and list the conflicted files.
-2. Explain each behavioral conflict in plain language.
-3. Recommend options when useful, but wait for the user's explicit decision.
-4. Apply only the approved resolution.
-5. Run the checks relevant to the resolved files, then finish the merge.
-
-Never guess through a conflict or use a destructive command to make it disappear.
-
-## Final report
-
-Report:
-
-- commit identifier and message;
-- whether and where it was merged;
-- checks that ran;
-- files intentionally left uncommitted;
-- any remaining action the user must take.
+Report the commit identifier and message, merge result, checks run, files left uncommitted, and any next action.

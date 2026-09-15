@@ -1,6 +1,6 @@
 # Security
 
-Pi extensions run as code with the user's permissions. Skills can instruct an agent to run commands and may include executable helper scripts.
+Pi extensions run as code with the user's permissions. Skills can instruct an agent to run commands.
 
 Before installing:
 
