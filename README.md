@@ -1,6 +1,6 @@
 # pi-herdr-skills
 
-A portable snapshot of 14 global [Pi](https://pi.dev/) skills and a permission-gate extension for planning, implementation, review, browser work, visual explanations, and [Herdr](https://herdr.dev/)-hosted Pi agents.
+A portable snapshot of 13 global [Pi](https://pi.dev/) skills and an ask-only destructive-command policy for planning, implementation, review, browser work, visual explanations, and [Herdr](https://herdr.dev/)-hosted Pi agents.
 
 > [!WARNING]
 > Pi extensions run with your user permissions, and skills can instruct an agent to run commands. Review this repository and every extension you install before enabling it.
@@ -13,18 +13,17 @@ First [install Pi](https://pi.dev/docs/latest/quickstart):
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 ```
 
-Clone this repository, inspect it, and run the conflict-safe installer:
+Install the pinned, parser-backed permission extension, then clone this repository, inspect it, and run the conflict-safe installer:
 
 ```bash
+pi install npm:@gotgenes/pi-permission-system@33.0.1
 git clone https://github.com/abhishek944/pi-herdr-skills.git
 cd pi-herdr-skills
 ./scripts/install.sh --dry-run
 ./scripts/install.sh
 ```
 
-The installer copies all 14 skills into Pi's global `~/.pi/agent/skills/` directory and `extensions/permission-gate.ts` into `~/.pi/agent/extensions/`. It refuses to overwrite a different managed skill or extension. If you intentionally replace conflicts, `./scripts/install.sh --force` backs up the existing files under `~/.pi/agent/skills-backups/` first.
-
-A global copy is required for these workflows because `model-routing-policy` deliberately accepts only Pi's trusted global model catalog. Do not install this repository as a Git-backed Pi package; that package location would make the implementation and review workflows stop at their model-routing safety check.
+The installer copies all 13 skills into the shared global `~/.agents/skills/` directory (discovered by Pi, Codex, and OpenCode) and installs the managed policy from `config/pi-permission-system.json` at `~/.pi/agent/extensions/pi-permission-system/config.json`. It also backs up and removes the retired `~/.pi/agent/extensions/permission-gate.ts` so two permission gates cannot run together. It refuses to overwrite a different managed skill or policy. If you intentionally replace conflicts, `./scripts/install.sh --force` backs up the existing files under `~/.pi/agent/skills-backups/` first.
 
 Restart Pi, or run `/reload` in an existing Pi session. See the official [skills documentation](https://pi.dev/docs/latest/skills) for Pi's discovery rules.
 
@@ -35,6 +34,7 @@ Update the checkout, inspect the diff, and reinstall:
 ```bash
 cd pi-herdr-skills
 git pull --ff-only
+pi install npm:@gotgenes/pi-permission-system@33.0.1
 npm run check
 ./scripts/install.sh --dry-run
 ./scripts/install.sh --force
@@ -43,7 +43,7 @@ npm run check
 If you are updating from a version that included the retired `herdr-orchestrator` skill, the installer cannot discover that removed source directory. Inspect and back up any local changes, then remove its installed copy and reload Pi:
 
 ```bash
-rm -rf -- "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/skills/herdr-orchestrator"
+rm -rf -- "$HOME/.agents/skills/herdr-orchestrator"
 ```
 
 `--force` creates a backup before replacing any locally changed skill. To uninstall matching copies:
@@ -53,7 +53,7 @@ rm -rf -- "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/skills/herdr-orchestrator"
 ./scripts/install.sh --uninstall
 ```
 
-If an installed skill was modified, uninstall refuses to remove it unless you add `--force`; forced removal backs it up first.
+If an installed skill or permission policy was modified, uninstall refuses to remove it unless you add `--force`; forced removal backs it up first. Uninstall retains the third-party package itself; remove it separately with `pi remove npm:@gotgenes/pi-permission-system` if nothing else uses it.
 
 ## Included skills
 
@@ -67,7 +67,6 @@ If an installed skill was modified, uninstall refuses to remove it unless you ad
 | `grill-me` | Challenges a plan one decision at a time and records the answers. |
 | `herdr` | Controls Herdr panes and Herdr-hosted Pi agents when a workflow authorizes it. |
 | `implement` | Coordinates implementation with a short written plan, checks, and proportionate review. |
-| `model-routing-policy` | Selects explicit provider, model, and thinking settings for delegated Pi agents. |
 | `no-unit-tests` | Prevents unit-test creation or execution unless the user explicitly requests it. |
 | `plainspoken-responses` | Keeps user-facing replies clear, friendly, and easy to follow. |
 | `read-flows` | Finds and reads repository flow documentation before relevant changes. |
@@ -89,9 +88,13 @@ Works and todos stay current as normal work progresses. Monitors are used only f
 
 When a skill needs to retain notes, screenshots, reports, or HTML, it writes to `var/<feature-name>/<skill-name>-details/` in the working repository.
 
-## Included extension
+## Permission policy
 
-`extensions/permission-gate.ts` blocks catastrophic or ambiguous shell operations and asks for explicit confirmation before other destructive commands. In Pi's TUI, it emits balanced `herdr:blocked` open/close events around each confirmation; the Herdr integration counts overlapping waits so connected interfaces remain in their permission-waiting state until every dialog closes. Print and JSON modes reject confirmation-covered commands without prompting. RPC mode can request confirmation, but its wait is not reported as a Herdr pet state. An exact recursive-deletion target outside the current project may proceed only after confirmation in an interactive Pi session. Broad targets, parent traversal, filesystem or home roots, protected system roots, and credential-sensitive paths remain blocked.
+This repository uses the pinned [`@gotgenes/pi-permission-system`](https://pi.dev/packages/@gotgenes/pi-permission-system) package instead of maintaining a shell parser. Its tree-sitter Bash analysis evaluates every command in chains, pipelines, substitutions, and subshells; quoted prompt text remains an argument rather than being mistaken for a command.
+
+The managed `config/pi-permission-system.json` policy allows ordinary tools and shell commands by default. External reads are allowed by default, while common sensitive paths still ask through `path_read`. External writes ask except under `/tmp/*`, `/var/*`, `~/.pi/*`, and Raycast's `~/Library/Application Support/com.raycast.macos/clipboard/*` (including macOS's canonical `/private/tmp/*` and `/private/var/*`). Listed destructive or high-impact shell operations and access to common sensitive files also ask. Read-only commands such as `git status` and `git show` run without a special rule. `MonitorCreate` is treated as a shell tool and follows the same policy. The policy uses `ask`—never `deny`—and keeps `yoloMode` disabled. With `permissionReviewLog` enabled, decisions are recorded for policy review.
+
+The parser evaluates every command in a compound shell invocation, but it cannot understand the behavior of arbitrary script files, computed environment-variable paths, or future CLIs. Repository-local `rm` inherits the default allow; external path gates still apply, but `/tmp/*`, `/var/*`, and `~/.pi/*` are explicit write exceptions, and static policy does not specially detect deletion of the repository root. Direct `.git` paths remain `ask`. Review permission dialogs before approving them. This policy is not an OS sandbox; consider filesystem and network sandboxing when hard containment is required. Headless Pi modes cannot present a confirmation and therefore reject `ask` operations.
 
 ### Browser workflow prerequisite
 
@@ -151,21 +154,7 @@ The implementation and review workflows require Herdr-hosted Pi agents.
    herdr integration status
    ```
 
-The skills use Herdr directly. They keep at most four panes per tab, name every work pane, wait for a clean interactive shell, pass explicit Pi model settings, collect the result, and close only resources they created. Read the [Herdr agent guide](https://herdr.dev/agent-guide.md) for concepts and controls.
-
-### Subagent model policy
-
-Routine non-review agents use **GPT-5.6 Sol or Terra only**. Sol handles general
-work; Terra is preferred for focused edits. Independent review runs automatically
-only for substantial features or complicated changes where complexity, risk, breadth,
-or uncertainty makes direct inspection insufficient. Straightforward low-risk changes,
-including localized UI work across closely related files, skip review when normal checks
-and direct inspection are enough. Explicitly requested simple reviews use **GPT-5.6 Sol**. **GPT-6 Astra at high thinking** is reserved for complicated
-reviews. Outside review, Astra requires an evidence-based exceptional-debugging
-exploration in the shared resolver. Production impact, timeouts, simple review, or
-unavailable Sol/Terra models do not unlock Astra. Other catalog entries are retained
-only for caller/contributor verification. No eligible permitted model means a clear blocker, not a wider
-fallback. See [model-routing-policy](skills/model-routing-policy/SKILL.md).
+The skills use Herdr directly. They create one dedicated tab with one root pane per agent, name the pane, wait for a clean interactive shell, pass explicit Pi model settings, collect the result, and close only resources they created. Read the [Herdr agent guide](https://herdr.dev/agent-guide.md) for concepts and controls.
 
 ## Extensions in the source setup
 
@@ -210,7 +199,7 @@ Package-provided skills, such as the image-generation skill, remain owned and up
 ## Repository layout
 
 ```text
-skills/                 Pi skill directories
+skills/                 Shared Agent Skills directories (Pi, Codex, OpenCode)
 extensions/             Pi command-safety extensions
 skills-manifest.json    Exact skill file checksums and executable modes
 scripts/install.sh      Conflict-safe global installer and uninstaller

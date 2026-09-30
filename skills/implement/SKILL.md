@@ -21,7 +21,7 @@ When available, use `WorkCreate`/`WorkUpdate` and `TodoCreate`/`TodoUpdate` to k
 - Do not commit, push, publish, or deploy unless explicitly asked.
 - Do not hard-code an answer for one example or bypass the owning boundary.
 - Use resolved `grill-me` and `ui-ux-grill-me` decisions as requirements; deferred decisions are not requirements.
-- Delegate only independent outcomes when doing so clearly improves speed or confidence.
+- For substantial work across distinct areas, look for bounded coding tasks to delegate before implementing. Delegate independent outcomes when doing so clearly improves speed or confidence; keep tightly coupled changes with one owner when splitting adds coordination risk. A read-only review is not a substitute for considering implementation delegation.
 - Leave live interactive end-to-end testing to the user unless they explicitly ask the agent to run it.
 
 ## Files
@@ -45,7 +45,7 @@ Edit these files directly and keep their contents readable.
 1. Pick a stable feature name and write a short plan and checklist.
 2. Read project instructions, matching flow documents, current behavior, and applicable decision files.
 3. Identify the owning boundary, acceptance criteria, edge cases, compatibility concerns, and rollback risk.
-4. Decide whether to work directly or delegate truly independent pieces.
+4. For multi-area work, identify candidate independent coding pieces; decide what to delegate and record the reason for delegating or keeping the work direct in `plan.md` or `progress.md`.
 5. Implement only the requested scope and keep the checklist current.
 6. Inspect the combined change for overlapping or conflicting edits.
 7. Run applicable non-unit checks such as formatting, linting, type checking, builds, or schema validation. Run unit tests only when the latest user request explicitly allows them.
@@ -55,7 +55,7 @@ Edit these files directly and keep their contents readable.
 
 ## Delegation
 
-When delegation is useful, give each agent one bounded outcome, acceptance criteria, relevant inputs, forbidden actions, and expected output. Use the global `model-routing-policy` and `herdr` skills when Herdr-hosted Pi agents are selected. Children do not launch more agents unless the parent explicitly permits it. The parent reads the actual combined changes and reruns affected checks.
+When delegation is useful, give each coding agent one bounded outcome, owned files or boundaries, acceptance criteria, relevant inputs, forbidden actions, and expected output. Set the shared contract before parallel edits and avoid overlapping ownership. Use the global `herdr` skill when Herdr-hosted Pi agents are selected. As optional defaults, prefer `openai-codex/gpt-6-luna` at `max` thinking with `--fast` for implementation agents and `openai-codex/gpt-6-sol` at `high` thinking without `--fast` for review agents. If the current user requests another model, use their choice instead; honor requested thinking or speed settings. These suggestions never require a model catalog or override an explicit user choice. Children do not launch more agents unless the parent explicitly permits it. The parent integrates and reads the actual combined changes and reruns affected checks.
 
 ## Final response
 
