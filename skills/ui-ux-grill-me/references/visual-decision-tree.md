@@ -2,6 +2,26 @@
 
 The conductor maintains this artifact at `var/<feature-name>/ui-ux-grill-me/<session-slug>/visual-decision-tree.md`.
 
+## DAG template
+
+Create `dag.md` in the parent session before questions. The parent owns it and the aggregate tree; owner sessions contain local trees and original responses.
+
+```markdown
+# Interview DAG — <parent-slug>
+
+| Branch | Todo/local ID | Outcome / closure criteria | Dependencies | Level | Owner | Session / owned boundary | Status | Evidence |
+| ------ | ------------- | -------------------------- | ------------ | ----- | ----- | ------------------------ | ------ | -------- |
+| <owner-slug>:B1 | <actual ID> | <decision plus all follow-ups closed> | — | 1 | <owner> | <unique flat owner session> | pending | — |
+| integrate-L1 | <actual ID> | Verify artifacts and reconcile level | <level-1 branches> | 1 | parent | <aggregate files only> | pending | — |
+
+## Level gates
+
+- L1: <independent branches>; integration: <pending/complete/blocked>
+- L2: <branches requiring verified L1 decisions>
+```
+
+Dependency IDs must exist and the graph must be acyclic. Keep readiness/status here, not in a second scheduler. A completed interview Todo records a verified disposition, not necessarily a resolved decision: a deferred prerequisite requires re-scoping or deferring downstream branches. Each owner records local parent-child links and reports discovered dependencies; only the parent updates shared DAG/Todos. Preserve qualified IDs and original paths during merge and handoff.
+
 ## Template
 
 ```markdown
@@ -29,15 +49,15 @@ The conductor maintains this artifact at `var/<feature-name>/ui-ux-grill-me/<ses
 
 ## Open branches
 
-| ID  | Branch      | Axis   | Status | Depends on |
-| --- | ----------- | ------ | ------ | ---------- |
-| B1  | Hero layout | layout | open   | —          |
+| Qualified ID | Branch | Axis | Level | Owner session | Status | Depends on |
+| ------------ | ------ | ---- | ----- | ------------- | ------ | ---------- |
+| <owner-slug>:B1 | Hero layout | layout | 1 | <owner-slug> | open | <verified foundations> |
 
 ## Resolved branches
 
 | ID  | Choice | Variant id | Why | Evidence          |
 | --- | ------ | ---------- | --- | ----------------- |
-| B1  | …      | B or none  | …   | selection-B1.json |
+| <owner-slug>:B1 | … | B or none | … | original owner selection-B1.json and screenshot/source paths |
 
 ## Deferred
 
@@ -49,6 +69,10 @@ The conductor maintains this artifact at `var/<feature-name>/ui-ux-grill-me/<ses
 
 ## Shared understanding checklist
 
+- [ ] Shared design/interaction foundations resolved before independent axes
+- [ ] Every level integration gate verified in dag.md
+- [ ] Owner trees merged with qualified IDs and original screenshot/source/selection paths
+- [ ] Every owner save server/Monitor cleaned up
 - [ ] Every open branch closed or deferred
 - [ ] No contradictory resolved decisions
 - [ ] Current UI captured before variants shown
@@ -63,11 +87,11 @@ The conductor maintains this artifact at `var/<feature-name>/ui-ux-grill-me/<ses
 
 ## Traversal rules
 
-1. **Depth-first on dependencies** — parent branches before children.
-2. **One comparison at a time** — wait for feedback before opening the next page; automatic same-turn progression is allowed.
+1. **Level-based between owners, depth-first within an owner** — resolve shared foundations, dispatch ready independent axes concurrently, then integrate the level before advancing.
+2. **One comparison per owner** — each owner opens a separate visible browser interview, waits for feedback, and follows local children automatically. Browser tabs/windows across owners may compete; artifact directories, ports and mutable capture state must not.
 3. **Current first** — option A is always the captured baseline unless user requests otherwise.
 4. **One axis per branch** — e.g. layout OR CTA prominence, not both.
-5. **Record feedback JSON** — keep the original `B<n>` branch ID and copy `selected`, `label`, and `why` from `selection-B<n>.json` into Resolved. If `submissionType` is `comments-only`, record the branch as rejected/rework-needed with variant `none`.
+5. **Record feedback JSON** — keep local helper IDs `B<n>` and qualify them as `<owner-slug>:B<n>` in the aggregate tree. For an accepted selection, copy `selected`, `label`, and `why` from `selection-B<n>.json` into Resolved. If `submissionType` is `comments-only`, keep the branch open/rework-needed with variant `none` until a revised choice is accepted or the user explicitly defers it. Only user-approved deferrals enter Deferred; they do not satisfy required decision dependencies.
 6. **Deferral is explicit** — do not skip branches silently.
 
 ## Branch quality bar

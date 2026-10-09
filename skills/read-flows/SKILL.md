@@ -15,7 +15,7 @@ Before planning or changing a workflow:
 
 Missing flow documentation is not a blocker.
 
-Before replying to the user, follow the global `plainspoken-responses` skill.
+Before replying to the user, follow the global `talk-human` skill.
 
 ## Session coordination
 

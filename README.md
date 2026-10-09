@@ -1,6 +1,6 @@
 # pi-herdr-skills
 
-A portable snapshot of 13 global [Pi](https://pi.dev/) skills and an ask-only destructive-command policy for planning, implementation, review, browser work, visual explanations, and [Herdr](https://herdr.dev/)-hosted Pi agents.
+A portable snapshot of 18 global [Pi](https://pi.dev/) skills for planning, implementation, review, browser work, visual explanations, and [Herdr](https://herdr.dev/)-hosted Pi agents.
 
 > [!WARNING]
 > Pi extensions run with your user permissions, and skills can instruct an agent to run commands. Review this repository and every extension you install before enabling it.
@@ -13,17 +13,16 @@ First [install Pi](https://pi.dev/docs/latest/quickstart):
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 ```
 
-Install the pinned, parser-backed permission extension, then clone this repository, inspect it, and run the conflict-safe installer:
+Clone this repository, inspect it, and run the conflict-safe installer:
 
 ```bash
-pi install npm:@gotgenes/pi-permission-system@33.0.1
 git clone https://github.com/abhishek944/pi-herdr-skills.git
 cd pi-herdr-skills
 ./scripts/install.sh --dry-run
 ./scripts/install.sh
 ```
 
-The installer copies all 13 skills into the shared global `~/.agents/skills/` directory (discovered by Pi, Codex, and OpenCode) and installs the managed policy from `config/pi-permission-system.json` at `~/.pi/agent/extensions/pi-permission-system/config.json`. It also backs up and removes the retired `~/.pi/agent/extensions/permission-gate.ts` so two permission gates cannot run together. It refuses to overwrite a different managed skill or policy. If you intentionally replace conflicts, `./scripts/install.sh --force` backs up the existing files under `~/.pi/agent/skills-backups/` first.
+The installer copies all 18 skills into the shared global `~/.agents/skills/` directory (discovered by Pi, Codex, and OpenCode). It does not require or install a permission extension or policy. It refuses to overwrite a different managed skill. If you intentionally replace conflicts, `./scripts/install.sh --force` backs up the existing files under `~/.pi/agent/skills-backups/` first.
 
 Restart Pi, or run `/reload` in an existing Pi session. See the official [skills documentation](https://pi.dev/docs/latest/skills) for Pi's discovery rules.
 
@@ -34,7 +33,6 @@ Update the checkout, inspect the diff, and reinstall:
 ```bash
 cd pi-herdr-skills
 git pull --ff-only
-pi install npm:@gotgenes/pi-permission-system@33.0.1
 npm run check
 ./scripts/install.sh --dry-run
 ./scripts/install.sh --force
@@ -46,6 +44,8 @@ If you are updating from a version that included the retired `herdr-orchestrator
 rm -rf -- "$HOME/.agents/skills/herdr-orchestrator"
 ```
 
+If upgrading from `discuss` or `plainspoken-responses`, the installer does not remove their retired global directories. After inspecting and backing up any local changes, remove `~/.agents/skills/discuss/` and `~/.agents/skills/plainspoken-responses/` so Pi loads only `research` and `talk-human`. Reload Pi afterward.
+
 `--force` creates a backup before replacing any locally changed skill. To uninstall matching copies:
 
 ```bash
@@ -53,27 +53,44 @@ rm -rf -- "$HOME/.agents/skills/herdr-orchestrator"
 ./scripts/install.sh --uninstall
 ```
 
-If an installed skill or permission policy was modified, uninstall refuses to remove it unless you add `--force`; forced removal backs it up first. Uninstall retains the third-party package itself; remove it separately with `pi remove npm:@gotgenes/pi-permission-system` if nothing else uses it.
+If an installed skill was modified, uninstall refuses to remove it unless you add `--force`; forced removal backs it up first.
 
 ## Included skills
 
 | Skill | Purpose |
 | --- | --- |
 | `agent-review` | Runs independent correctness, architecture, and regression reviews before shipping. |
+| `archify` | Renders and validates interactive architecture, workflow, sequence, data-flow, and state diagrams. |
 | `browser-use` | Automates browser navigation, forms, screenshots, testing, and extraction. |
 | `commit-and-merge` | Commits real changes and merges into the default branch when explicitly requested. |
 | `design-council` | Compares architecture, API, workflow, and product-design options without editing. |
-| `discuss` | Investigates and debugs a repository without applying a fix. |
-| `grill-me` | Challenges a plan one decision at a time and records the answers. |
+| `research` | Investigates and debugs a repository without applying a fix. |
+| `next-feature` | Autonomously recommends what to build next from real user problems, web evidence, product fit, and code-grounded sizing. |
+| `grill-me` | Challenges a plan in DAG levels with parallel browser branch owners and recorded follow-ups. |
 | `herdr` | Controls Herdr panes and Herdr-hosted Pi agents when a workflow authorizes it. |
+| `model-routing-policy` | Defines shared subagent model, thinking, and Fast defaults in one editable file. |
 | `implement` | Coordinates implementation with a short written plan, checks, and proportionate review. |
 | `no-unit-tests` | Prevents unit-test creation or execution unless the user explicitly requests it. |
-| `plainspoken-responses` | Keeps user-facing replies clear, friendly, and easy to follow. |
+| `talk-human` | Combines clear, friendly replies with Caveman's lite brevity. |
+| `caveman` | Optional standalone concise response styles; bundled skill-only under Apache-2.0. |
 | `read-flows` | Finds and reads repository flow documentation before relevant changes. |
-| `ui-ux-grill-me` | Captures an interface and records visual UX choices in a browser. |
+| `retro` | Reviews a coding session for ways to improve the agent's working environment; invoke explicitly with `/skill:retro`. |
+| `ui-ux-grill-me` | Captures an interface and resolves independent UX branches in parallel browser interviews. |
 | `visual-explainer` | Produces self-contained HTML explanations, diagrams, comparisons, and data views. |
 
 Some skills depend on other skills in this repository. Install the complete set rather than copying only `implement`, `agent-review`, or `design-council`.
+
+Edit `skills/model-routing-policy/SKILL.md` to change subagent model, thinking, and Fast defaults. `implement`, `agent-review`, `herdr`, `grill-me`, and `ui-ux-grill-me` read that shared policy before launching agents. Explicit user choices override its defaults; the parent agent's model is unchanged. Reinstall after editing so the global copy stays current.
+
+### Technical diagrams with Archify
+
+The complete [Archify v3.0.1](https://github.com/tt-a1i/archify/releases/tag/v3.0.1) runtime is bundled under `skills/archify/`; no npm install or separate skill-manager install is needed. It requires Node.js >=18 and Chrome/Chromium for its full automated diagram browser gate. See [provenance and update instructions](skills/archify/PROVENANCE.md).
+
+`visual-explainer` routes standalone technical diagrams to Archify while retaining reports, comparisons, dashboards, and small embedded Mermaid diagrams. `research` and `design-council` can optionally hand off grounded findings or explicitly labeled proposals. Interview response collection, task ownership, and review judgment are unchanged.
+
+Ask, for example: “Use Archify to diagram the cache-miss request path in this repository.” Candidates, HTML, receipts, and exports stay under `var/<feature-name>/archify-details/`. Repository citations are verified against a pinned committed revision, not uncommitted worktree bytes. Automated checks and actual visual inspection are reported separately.
+
+Archify may check its upstream update manifest and cache a reminder; it does not automatically install updates. Review and update the pinned bundle through this repository instead. Bundled brand marks retain separate license and trademark terms; see the [third-party notices](skills/archify/THIRD_PARTY_NOTICES.md).
 
 ### Session coordination
 
@@ -88,13 +105,15 @@ Works and todos stay current as normal work progresses. Monitors are used only f
 
 When a skill needs to retain notes, screenshots, reports, or HTML, it writes to `var/<feature-name>/<skill-name>-details/` in the working repository.
 
-## Permission policy
+## Permission gates
 
-This repository uses the pinned [`@gotgenes/pi-permission-system`](https://pi.dev/packages/@gotgenes/pi-permission-system) package instead of maintaining a shell parser. Its tree-sitter Bash analysis evaluates every command in chains, pipelines, substitutions, and subshells; quoted prompt text remains an argument rather than being mistaken for a command.
+This repository no longer installs or requires tool-permission gates. If you installed the previously required extension, remove it globally and reload or restart every running Pi session, including Herdr agents:
 
-The managed `config/pi-permission-system.json` policy allows ordinary tools and shell commands by default. External reads are allowed by default, while common sensitive paths still ask through `path_read`. External writes ask except under `/tmp/*`, `/var/*`, `~/.pi/*`, and Raycast's `~/Library/Application Support/com.raycast.macos/clipboard/*` (including macOS's canonical `/private/tmp/*` and `/private/var/*`). Listed destructive or high-impact shell operations and access to common sensitive files also ask. Read-only commands such as `git status` and `git show` run without a special rule. `MonitorCreate` is treated as a shell tool and follows the same policy. The policy uses `ask`—never `deny`—and keeps `yoloMode` disabled. With `permissionReviewLog` enabled, decisions are recorded for policy review.
+```bash
+pi remove npm:@gotgenes/pi-permission-system
+```
 
-The parser evaluates every command in a compound shell invocation, but it cannot understand the behavior of arbitrary script files, computed environment-variable paths, or future CLIs. Repository-local `rm` inherits the default allow; external path gates still apply, but `/tmp/*`, `/var/*`, and `~/.pi/*` are explicit write exceptions, and static policy does not specially detect deletion of the repository root. Direct `.git` paths remain `ask`. Review permission dialogs before approving them. This policy is not an OS sandbox; consider filesystem and network sandboxing when hard containment is required. Headless Pi modes cannot present a confirmation and therefore reject `ask` operations.
+Old policy files and review logs are not needed by the skills. Removing the extension also removes its destructive-command and sensitive-path protection; it does not change Pi's built-in project trust or unrelated skill safety rules.
 
 ### Browser workflow prerequisite
 
@@ -200,10 +219,9 @@ Package-provided skills, such as the image-generation skill, remain owned and up
 
 ```text
 skills/                 Shared Agent Skills directories (Pi, Codex, OpenCode)
-extensions/             Pi command-safety extensions
 skills-manifest.json    Exact skill file checksums and executable modes
 scripts/install.sh      Conflict-safe global installer and uninstaller
-scripts/check-repo.sh   Structure, portability, and sensitive-data checks
+scripts/check-repo.sh   Repository/global skill equality check
 third_party/licenses/   Required upstream license texts
 package.json            Repository metadata and check command
 ```

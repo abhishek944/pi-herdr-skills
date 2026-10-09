@@ -8,7 +8,7 @@ compatibility: Requires a Git repository and support for independent reviewers.
 
 Review changes without editing them. Use this skill when the user asks for review or when an implementation has meaningful risk, breadth, or uncertainty. Skip it for straightforward changes that can be checked confidently by direct inspection.
 
-Before replying to the user, follow the global `plainspoken-responses` skill.
+Before replying to the user, follow the global `talk-human` skill.
 
 ## Session coordination
 
@@ -27,7 +27,7 @@ When available, use `WorkCreate`/`WorkUpdate` and `TodoCreate`/`TodoUpdate` to k
 
 1. Define the review base, target, and scope.
 2. Read any applicable decisions in `var/<feature-name>/grill-me-details/` and `var/<feature-name>/ui-ux-grill-me-details/`.
-3. Launch independent read-only reviewers when available and useful.
+3. Before launching independent read-only reviewers, read and follow the globally installed `model-routing-policy` skill for model, thinking level, and Fast settings. Keep routing defaults only in that skill. Launch reviewers when available and useful.
 4. Ask for actionable findings with severity, evidence, and a clear recommendation.
 5. Combine duplicates by root cause.
 6. Accept, reject, or leave each finding unresolved with a short reason.

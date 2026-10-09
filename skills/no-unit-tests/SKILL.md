@@ -7,7 +7,7 @@ description: Prevent unit-test creation and execution unless the user's latest r
 
 Apply this to every implementation, fix, refactor, migration, and maintenance task.
 
-Before replying to the user, follow the global `plainspoken-responses` skill.
+Before replying to the user, follow the global `talk-human` skill.
 
 ## Rule
 

@@ -9,7 +9,7 @@ compatibility: Requires the browser-use CLI and its browser-harness runtime.
 
 Use Browser Use when a task needs a real browser: JavaScript rendering, clicks, forms, screenshots, downloads, or an existing signed-in session. Use normal web fetching for public pages that do not need interaction.
 
-Before replying to the user, follow the global `plainspoken-responses` skill.
+Before replying to the user, follow the global `talk-human` skill.
 
 ## Session coordination
 

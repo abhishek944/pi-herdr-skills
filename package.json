@@ -1,7 +1,7 @@
 {
   "name": "pi-herdr-skills",
-  "version": "0.2.0",
-  "description": "Reusable Pi skills and an ask-only destructive-command policy for Herdr-backed workflows.",
+  "version": "0.3.0",
+  "description": "Reusable Pi skills for Herdr-backed workflows.",
   "private": true,
   "keywords": [
     "pi-skills",

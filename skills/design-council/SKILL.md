@@ -8,7 +8,7 @@ compatibility: Requires a repository checkout and support for independent agents
 
 Compare design options without changing production files.
 
-Before replying to the user, follow the global `plainspoken-responses` skill.
+Before replying to the user, follow the global `talk-human` skill.
 
 ## Session coordination
 
@@ -31,6 +31,10 @@ When available, use `WorkCreate`/`WorkUpdate` and `TodoCreate`/`TodoUpdate` to k
 4. Otherwise compare the smallest useful set of perspectives, such as product, architecture, security, operations, cost, or maintainability.
 5. Synthesize the tradeoffs, rejected options, assumptions, dissent, and evidence that could change the recommendation.
 6. Ask the user to approve the direction before implementation.
+
+## Optional diagram handoff
+
+When competing architectures, workflows, or state models are easier to compare visually, read and follow the global `archify` skill. Pass the feature name, decision, distinct options, verified current-source evidence, and assumptions. Keep the source-backed current-state diagram separate from each proposed option. Proposed diagrams must be description-backed, clearly labeled proposals without `meta.repository` or citations asserting unimplemented behavior; retain current-source evidence and assumptions in the decision notes. Preserve differences and uncertainty instead of implying consensus. Reuse the current work and todo; keep diagram artifacts under `var/<feature-name>/archify-details/` and link them from the decision notes. Archify does not choose the design or authorize implementation. Keep ordinary tradeoff tables and narrative reports in `visual-explainer`.
 
 ## Files
 

@@ -1,6 +1,6 @@
 ---
 name: ui-ux-grill-me
-description: "Repository-agnostic visual UX interview: capture the current interface, present grounded design variants in a browser, record user feedback one decision at a time, and produce an implementation-ready visual contract."
+description: "Repository-agnostic visual UX interview: capture the current interface, present grounded design variants in a browser, run dependency-level parallel browser interviews with autonomous branch owners, and produce an implementation-ready visual contract."
 compatibility: Requires Node.js, browser automation, a renderable target or mockup environment, Herdr, and Herdr-hosted Pi agents.
 ---
 
@@ -12,7 +12,7 @@ Resolve `<skill-root>` to the directory containing this `SKILL.md`. Work from th
 
 ## User-facing language
 
-Before every commentary or final response, read `../plainspoken-responses/SKILL.md`.
+Before every commentary or final response, read `../talk-human/SKILL.md`.
 
 # UI/UX Grill Me
 
@@ -29,23 +29,46 @@ Help the user see and choose interface directions before implementation. This wo
 - Include the current UI as a baseline when it exists.
 - Offer enough distinct options to make the decision meaningful, usually three to six. Include at least one conservative and one unconventional direction when appropriate.
 - Comments-only rejection is valid; never force a selection.
-- Keep one decision open at a time and collect its response with `wait-for-selection.mjs` in the same turn before advancing; never substitute a chat question for the wait script.
-- Keep the save server alive on a Monitor — preflight starts the save server when needed. Immediately confirm it with `MonitorList`; if no monitor covers the save server, register it with `MonitorCreate` (with an `onDone` wake that re-checks the pending branch). Renew the inactivity timeout with `MonitorUpdate` during long waits. Never poll with shell sleep loops. Stop the server only after the final branch response is recorded.
+- Keep one decision open per branch owner, not globally. Independent owners open separate concurrent browser interviews and collect their own responses with `wait-for-selection.mjs` in the same turn; never substitute a chat question for the wait script.
+- Keep the save server alive on a Monitor — preflight starts the save server when needed. Immediately confirm it with `MonitorList`; if no monitor covers the save server, register it with `MonitorCreate` (with an `onDone` wake that re-checks the pending branch). Renew the inactivity timeout with `MonitorUpdate` during long waits. Never poll with shell sleep loops. Stop only the owner's server after its final response is recorded or before returning a blocker, followed by its server Monitor.
 - Use an automatically assigned session port — never choose or reuse a fixed port. Omit `--port` from preflight so the operating system assigns an unoccupied loopback port. Preflight persists it in `<session-dir>/save-server.port`, reuses it only for later branches of that same session, and rejects explicit occupied ports.
 - Open human comparison pages through the operating system's visible browser (`open` on macOS), never through Browser Use. Browser Use remains valid for automated capture and inspection, but it must not present UI/UX interview choices.
 - Preserve the selected image, source, viewport, interaction state, data fixture, and rationale. A label alone is not a visual contract.
 - Never expose private data, internal identifiers, credentials, or sensitive environment details in screenshots.
 - Global skill handoffs are allowed, but do not hard-code or require repository-only skill names or agent role names.
 
+## DAG and parallel branch ownership
+
+Before opening the first question, the parent creates `dag.md` beside `visual-decision-tree.md`. Use Work/Todo tracking when available: one Todo per top-level decision branch and one integration Todo per level. Record **Branch ID, Todo ID, outcome/closure criteria, dependency IDs, level, owner, session slug/artifact boundary, status, and evidence paths**. Without Todo tools, use stable local IDs; never invent Todo IDs. Validate dependencies and cycles before dispatch. The parent alone edits the shared DAG, aggregate tree, contract, and parent Todos; children write only their assigned interview artifacts.
+
+1. Group independent ready branches into levels. A branch is ready only when required decisions are verified resolved and the previous level's integration is complete. A deferred dependency does not satisfy a required decision: explicitly re-scope or defer its dependents. Shared choices must be dependencies, not parallel guesses.
+2. Dispatch independent branches concurrently through the Herdr policy below. Delegate substantial follow-up trees; keep trivial clarifications with the parent without serializing independent owners. Each owner has authority to open its own visible browser pages and ask the user directly. Concurrent browser tabs/windows are intentional; no shared-browser bottleneck or extra parent approval for each follow-up.
+3. Every interviewer, including the parent handling a trivial branch, gets a unique **flat session slug**, such as `<parent-slug>-b1`, under `var/<feature-name>/ui-ux-grill-me/`. Use that slug in the existing helpers; do not introduce unsupported nested session paths or branch-ID formats. Each owner gets its own save server, automatically assigned port, Monitor and artifact directory. Keep helper IDs `B<n>` local; use `<owner-slug>:B<n>` in the shared DAG/tree so parallel `B1` responses cannot collide. Show the owner/decision and level in question titles.
+4. The owner runs the existing browser workflow, records every `selection-B<n>.json`, then follows its answer-driven children sequentially within that owner (for example A → A1 → A2). Keep local IDs stable and record parent-child links in its local tree. No new agents or edits to other owners' files. If a child needs another owner's decision, return an explicit dependency/blocker rather than guessing or waiting on the sibling.
+5. An owner returns only when its entire assigned tree is resolved or explicitly deferred, or a real blocker prevents closure. Return decisions/rationale, child links, acceptance criteria, original response/evidence paths, user-approved deferred reasons/revisit conditions, blockers/cross-branch dependencies, and resource cleanup status. Comments-only rejection requires rework, not resolution. A timeout or agent completion is not a user answer.
+6. The parent reads each complete result and original artifacts before marking its DAG row/Todo completed. Record resolved/deferred disposition separately from task completion; deferred decisions are not implementation requirements. Mark partial/failed owners blocked and keep the next level pending. Merge child branches into the aggregate tree with qualified IDs and original artifact paths.
+7. Reconcile the whole level for conflicting decisions, overlapping scope and missing evidence. Conflicts become explicit follow-up branches; do not silently choose an agent's answer. Reopen affected owners/dependents when a decision changes. Update DAG dependencies and Todos together, then finish the level's integration Todo before opening the next level.
+8. Continue automatically until every branch is verified resolved or explicitly deferred and final integration is complete. Hand off the aggregate tree and DAG plus every owner session's original evidence paths, not just a summary.
+
+### Branch-owner assignment
+
+When invoked as an assigned branch owner, skip parent intake, shared DAG creation, dispatch and aggregate handoff. Run only your local comparison/follow-up loop and return its result; do not recursively invoke the full conductor workflow.
+
+For human interviews, choose a prompt-and-wait deadline long enough for the browser waits and follow-ups; the 15-minute runtime minimum is not a completion budget. A deadline never resolves a branch: preserve pending evidence and resume it explicitly.
+
+Include the decision scope, level/dependencies, inherited verified decisions, closure criteria, feature name, unique owner slug, owned/forbidden paths, helper interfaces and browser authority in the prompt. Authorize follow-up questions, local tree/response writes, and its own server/Monitor lifecycle, while keeping production code read-only. State that it must close only resources it created, preserve evidence, not update parent tracking, not spawn agents, and return the complete branch result above. Evidence-only agents remain read-only and do not interview the user.
+
+Resolve shared layout, navigation, design tokens and interaction foundations before dispatching independent visual axes. Give owners the same verified foundation and comparison constraints. Use isolated browser capture contexts and mockups; do not mutate a shared live fixture, theme or route state concurrently. Parent integration checks that selected designs fit together before the next level.
+
 ## Independent-agent policy
 
 Apply this policy whenever the workflow uses an explorer, researcher, critic, reviewer, or any other independent agent. These are prompt responsibilities, not repository-defined skill or role names.
 
-Use optional Pi subagent defaults: `openai-codex/gpt-6-luna` at `max` thinking with `--fast` for exploration, design grounding, and other non-review responsibilities; `openai-codex/gpt-6-sol` at `high` thinking without `--fast` for critics and reviewers. If the current user explicitly asks for another model, use their choice instead for the applicable agents, honoring any requested provider, thinking level, or speed setting. Check availability and required image or other input support before launch. If the optional default Fast setting is unavailable, omit `--fast` rather than blocking; if the user explicitly requested Fast, report that it is unavailable. Pass provider, model, and thinking explicitly to Pi, and verify the launch and requested Fast status before prompting. If an explicitly requested model is unavailable or incompatible, explain the issue rather than silently replacing it. Keep every independent agent recursion-disabled.
+Before launching subagents, read and follow the globally installed `model-routing-policy` skill for model, thinking level, and Fast settings. Keep routing defaults only in that skill. Check required image or other input support before launch; report incompatible models rather than silently substituting. If the default Fast setting is unavailable, omit `--fast`; if the user explicitly requested Fast, report that it is unavailable. Pass provider, model, and thinking explicitly to Pi, and verify the launch and requested Fast status before prompting. Keep every independent agent recursion-disabled.
 
 Herdr-hosted Pi agents are the only runtime. Require `HERDR_ENV=1` and the `herdr` command, then read and follow the globally installed `herdr` skill before issuing control commands. Record the caller workspace, tab, pane, working directory, and focus state. Create one dedicated unfocused task tab per agent in the caller's workspace and working directory. Use only its root pane; never split agent tabs. Parse all returned tab and root-pane IDs; never guess them. Name each root pane by responsibility and apply the Herdr skill's bounded readiness gate to each before starting only Pi agents with explicit provider/model/thinking settings, adding `--fast` only when chosen and supported. Verify every start response, prompt concurrently with productive prompt-and-wait deadlines of at least `900000` milliseconds (15 minutes), and collect every complete result. An `agent_pane_busy` response after readiness follows the Herdr skill's fail-closed cleanup path and is not model fallback. Herdr setup that remains failed after bounded readiness recovery, ambiguous prompt/wait failure, output loss after work, or failed provenance blocks after owned-resource cleanup. If an agent produces no usable contribution, report the failure and retry only when a suitable model is available without contradicting the user's explicit choice.
 
-For every agent prompt, give a read-only scope, the question to answer, evidence requirements, forbidden actions, and the expected output. Use only as many agents as provide distinct evidence or perspectives.
+For grounding/review prompts, give a read-only scope, evidence requirements, forbidden actions and expected output. Interview owners may create assigned mockups, screenshots and local trees and ask browser questions directly, but production code stays read-only. Use the branch-owner assignment above and avoid redundant interviews.
 
 ## Artifacts
 
@@ -57,7 +80,7 @@ If that location conflicts with project rules, use the approved location and ada
 
 Create:
 
-- a visual decision tree;
+- a parent-owned Todo-linked `dag.md` before the first comparison, plus an aggregate visual decision tree;
 - baseline and variant screenshots;
 - source mockups or live-route references;
 - one saved response per branch;
@@ -80,9 +103,16 @@ Use independent repository or design reviewers when they add distinct evidence o
 
 An AI-generated art-direction image is optional. If an image-generation tool is available and useful, treat its output only as inspiration. A selectable UI option must still come from a browser-rendered mockup or live implementation source.
 
+## Level workflow
+
+1. Create the DAG and resolve shared foundations; assign unique owner sessions and artifact boundaries.
+2. Dispatch ready independent branches concurrently. Each owner runs the branch workflow below and closes all local follow-ups or returns an explicit blocker.
+3. Verify original selections/screenshots/source, merge qualified child branches, and reconcile the level's visual consistency and accessibility.
+4. Finish the level integration gate before opening the next level. Complete final integration before handing off the aggregate visual contract and all original owner artifact paths.
+
 ## Branch workflow
 
-For each branch:
+For each branch within its owner's session:
 
 1. State the user need and one design axis being decided.
 2. Capture the current target surface at the exact comparison viewport.
@@ -102,7 +132,7 @@ node <skill-root>/scripts/wait-for-selection.mjs \
 ```
 
 A browser Submit is the only thing that writes `selection-B<n>.json`. Keep the save-server Monitor active while waiting. On timeout, verify the server is still reachable (`MonitorList` + HTTP 200), renew with `MonitorUpdate`, and wait again — never treat a timeout as an answer and never skip to chat.
-10. Save the response and continue to the next unresolved branch.
+10. Record the response in the owner's local visual decision tree. Rework comments-only rejection, follow answer-driven children, and continue until the assigned tree is resolved or explicitly deferred; return evidence to the parent for integration.
 
 Start from `templates/example-options.json`; its top-level `contract` is required and is copied unchanged into the saved selection. The bundled helpers can be used as follows:
 
@@ -128,14 +158,14 @@ node <skill-root>/scripts/wait-for-selection.mjs \
 
 Preflight prints the automatically assigned port and stores it in `save-server.port`. Do not pass `--port` during normal use. Do not open comparison pages with `file://`; saved feedback requires the local HTTP server.
 
-After the final response is recorded, stop only that session's server using its persisted port:
+After the owner's final response is recorded, or before returning a blocker, stop only that owner's session server using its persisted port. The parent verifies cleanup for every owner and closes only its owned Herdr resources after collecting results. If an owner exits without cleanup, recover only its assigned session through `stop-server.mjs`, then stop its server Monitor; never kill an unrelated or guessed process:
 
 ```bash
 node <skill-root>/scripts/stop-server.mjs \
   --dir var/<feature-name>/ui-ux-grill-me/<session-slug>
 ```
 
-The server also shuts itself down after two idle hours.
+After `stop-server.mjs` returns, stop only the Monitor covering that owner's save server. The server also shuts itself down after two idle hours.
 
 ## Visual contract
 
@@ -179,7 +209,7 @@ Implementation must reproduce and capture the same state, compare it directly, a
 - behavior and accessibility requirements
 - exact comparison checklist
 - feature name, session slug, parent Grill Me slug, and resolved/deferred branch IDs
-- decision-tree handoff and required current visual evidence
+- aggregate decision-tree/DAG handoff, qualified branch IDs, original owner artifact paths, and required current visual evidence
 
 ## Next step
 
