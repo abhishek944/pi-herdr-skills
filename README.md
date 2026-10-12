@@ -1,6 +1,6 @@
 # pi-herdr-skills
 
-A portable snapshot of 18 global [Pi](https://pi.dev/) skills for planning, implementation, review, browser work, visual explanations, and [Herdr](https://herdr.dev/)-hosted Pi agents.
+A portable collection of 20 global [Pi](https://pi.dev/) skills for planning, implementation, review, browser and desktop work, visual explanations, and [Herdr](https://herdr.dev/)-hosted Pi agents.
 
 > [!WARNING]
 > Pi extensions run with your user permissions, and skills can instruct an agent to run commands. Review this repository and every extension you install before enabling it.
@@ -22,7 +22,7 @@ cd pi-herdr-skills
 ./scripts/install.sh
 ```
 
-The installer copies all 18 skills into the shared global `~/.agents/skills/` directory (discovered by Pi, Codex, and OpenCode). It does not require or install a permission extension or policy. It refuses to overwrite a different managed skill. If you intentionally replace conflicts, `./scripts/install.sh --force` backs up the existing files under `~/.pi/agent/skills-backups/` first.
+The installer copies all 20 skills into the shared global `~/.agents/skills/` directory (discovered by Pi, Codex, and OpenCode). It does not require or install a permission extension or policy. It refuses to overwrite a different managed skill. If you intentionally replace conflicts, `./scripts/install.sh --force` backs up the existing files under `~/.pi/agent/skills-backups/` first.
 
 Restart Pi, or run `/reload` in an existing Pi session. See the official [skills documentation](https://pi.dev/docs/latest/skills) for Pi's discovery rules.
 
@@ -63,6 +63,8 @@ If an installed skill was modified, uninstall refuses to remove it unless you ad
 | `archify` | Renders and validates interactive architecture, workflow, sequence, data-flow, and state diagrams. |
 | `browser-use` | Automates browser navigation, forms, screenshots, testing, and extraction. |
 | `commit-and-merge` | Commits real changes and merges into the default branch when explicitly requested. |
+| `codebase-design` | Guides module responsibilities, explicit interfaces, justified abstractions, and version-aware TypeScript/Effect contracts. |
+| `computer-use` | Operates desktop apps through local Cua Driver MCP with grounded input, screenshot forwarding, and verified outcomes. |
 | `design-council` | Compares architecture, API, workflow, and product-design options without editing. |
 | `research` | Investigates and debugs a repository without applying a fix. |
 | `next-feature` | Autonomously recommends what to build next from real user problems, web evidence, product fit, and code-grounded sizing. |
@@ -78,9 +80,24 @@ If an installed skill was modified, uninstall refuses to remove it unless you ad
 | `ui-ux-grill-me` | Captures an interface and resolves independent UX branches in parallel browser interviews. |
 | `visual-explainer` | Produces self-contained HTML explanations, diagrams, comparisons, and data views. |
 
+`codebase-design` is the shared design reference for relevant `design-council`, `implement`, and `agent-review` work. It asks for a short design contract before non-trivial abstraction changes, without forcing extra agents or overriding test permissions. It is adapted from Matt Pocock's guidance; provenance and the MIT license are bundled with the skill. Run `/skill:codebase-design` to invoke it directly.
+
 Some skills depend on other skills in this repository. Install the complete set rather than copying only `implement`, `agent-review`, or `design-council`.
 
 Edit `skills/model-routing-policy/SKILL.md` to change subagent model, thinking, and Fast defaults. `implement`, `agent-review`, `herdr`, `grill-me`, and `ui-ux-grill-me` read that shared policy before launching agents. Explicit user choices override its defaults; the parent agent's model is unchanged. Reinstall after editing so the global copy stays current.
+
+### Desktop computer use
+
+`computer-use` uses Pi's native MCP with an independently installed official [Cua Driver](https://cua.ai/docs/cua-driver/quickstart). It does not install a computer-use extension, replace Pi's model, or invoke another agent. On macOS, after reviewing and installing Driver and approving its OS permissions, register the signed app executable globally:
+
+```bash
+pi mcp add cua-driver --exposure codemode -- /Applications/CuaDriver.app/Contents/MacOS/cua-driver mcp
+pi mcp list
+```
+
+On other platforms, use the reviewed `cua-driver` executable's absolute path. The CLI adds one server to personal `mcp.json`; preserve unrelated servers. Run `/reload`, then try `/skill:computer-use Open Calculator, compute 6 × 7, and verify 42 from a fresh window snapshot.`
+
+The local server controls the real host desktop, not a VM. Screenshots and extracted app text can reach Pi's model provider. The skill recommends narrow captures, live-schema discovery, sequential actions, outcome verification, and explicit authorization for consequential steps; it is not an enforced sandbox or permission gate. For unattended work, use an isolated desktop or a reviewed bounded Driver capability manifest.
 
 ### Technical diagrams with Archify
 

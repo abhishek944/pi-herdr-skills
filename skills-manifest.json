@@ -1,10 +1,10 @@
 {
   "snapshot": "2026-09-11",
-  "skills": 18,
+  "skills": 20,
   "files": [
     {
       "path": "skills/agent-review/SKILL.md",
-      "sha256": "3d37123ff1fe917eed5ff98bad84bd3edab21ed0822f812f531ddf41b3cdfeac",
+      "sha256": "9659cb4bc2b2751893f43d0e97ae5c01aa225eb5b448a94ad59d8f6d1470f9c8",
       "executable": false
     },
     {
@@ -553,13 +553,28 @@
       "executable": false
     },
     {
+      "path": "skills/codebase-design/LICENSE",
+      "sha256": "0e7ac423bf2c6e223b7c5b156f8cf72da49d748e56a1641402c31f22ad07dbb5",
+      "executable": false
+    },
+    {
+      "path": "skills/codebase-design/SKILL.md",
+      "sha256": "ca1c1234e873c0e67eaf54390c40f3fd5e8feecf6e9293a7f428d99b1cceeebc",
+      "executable": false
+    },
+    {
       "path": "skills/commit-and-merge/SKILL.md",
       "sha256": "5832e4174599f2a7253d06cc8062b8afcc2fefc5ed0f2ae2330d7d2591ca5f76",
       "executable": false
     },
     {
+      "path": "skills/computer-use/SKILL.md",
+      "sha256": "49e7c13a3ae39553e7bcedc0750b65252270c0c96cd1e83ffd4392d3ea79dfa1",
+      "executable": false
+    },
+    {
       "path": "skills/design-council/SKILL.md",
-      "sha256": "d1c963684f2db75a570630cef4d13b4da25685482406e62cd5ea22812ea10b95",
+      "sha256": "7f6fce627f0047a07c9ff118690b1ad51920b69780675550b7e434be7ff99274",
       "executable": false
     },
     {
@@ -614,7 +629,7 @@
     },
     {
       "path": "skills/implement/SKILL.md",
-      "sha256": "5d78e13ff068c0e884a51feb0555eccfca103236faad8d39e81af2187381a8b5",
+      "sha256": "4bf622f348be9de27cde5ff5ca1cccf011b76e164bc7c91ac00e329c183da251",
       "executable": false
     },
     {

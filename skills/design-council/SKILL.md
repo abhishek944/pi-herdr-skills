@@ -17,6 +17,7 @@ When available, use `WorkCreate`/`WorkUpdate` and `TodoCreate`/`TodoUpdate` to k
 ## Rules
 
 - Read project instructions and relevant architecture records first.
+- For module, interface, or abstraction decisions, read the global `codebase-design` skill fully. Use its design contract and comparison checks within this workflow; it does not authorize implementation or require extra agents.
 - Keep production files read-only.
 - Ground repository claims in current files and external claims in reliable current sources.
 - Use independent perspectives only when they add distinct evidence.

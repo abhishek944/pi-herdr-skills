@@ -45,7 +45,7 @@ Edit these files directly and keep their contents readable.
 
 1. Pick a stable feature name and write a short plan and checklist.
 2. Read project instructions, matching flow documents, current behavior, and applicable decision files.
-3. Identify the owning boundary, acceptance criteria, edge cases, compatibility concerns, and rollback risk.
+3. Identify the owning boundary, acceptance criteria, edge cases, compatibility concerns, and rollback risk. Before non-trivial interface changes, new abstractions, or responsibility restructuring, read the global `codebase-design` skill fully and record its scaled design contract in `plan.md`. Reuse approved design decisions rather than reopening them without new evidence; a straightforward local fix needs only a brief ownership/contract check.
 4. For substantial multi-area work, map outcomes and dependencies in `dag.md` before assigning any coding agents; follow the DAG workflow below. For small or tightly coupled work, skip the DAG and record why direct work is simpler in `plan.md`.
 5. Implement only the requested scope, follow ready DAG nodes when one exists, and keep the checklist current.
 6. Inspect the combined change for overlapping or conflicting edits.

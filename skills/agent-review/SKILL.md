@@ -17,6 +17,7 @@ When available, use `WorkCreate`/`WorkUpdate` and `TodoCreate`/`TodoUpdate` to k
 ## Rules
 
 - Read repository instructions, the current diff, nearby callers, and relevant documentation.
+- For changes to interfaces, abstractions, or module responsibilities, read the global `codebase-design` skill fully and give architecture reviewers the agreed design contract and its review checks. Check actual callers, invariants, dependency/resource ownership, and failure behavior; do not treat more layers as better design or authorize test changes.
 - Reviewers are read-only. They do not edit files, run tests, or launch more agents.
 - Preserve unrelated work. Never commit, push, publish, or deploy.
 - Use three independent perspectives for complicated work: correctness and safety, architecture and integration, and regression risk.
