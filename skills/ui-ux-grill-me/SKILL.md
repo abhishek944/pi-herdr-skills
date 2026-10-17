@@ -16,7 +16,7 @@ Before every commentary or final response, read `../talk-human/SKILL.md`.
 
 # UI/UX Grill Me
 
-Help the user see and choose interface directions before implementation. This workflow is read-only on production code unless the user separately enters implementation mode.
+Help the user see and choose interface directions, then automatically implement the resolved visual contract. Production code remains read-only during the interview; the parent exits interview mode and starts the globally installed `implement` skill after verified final integration.
 
 ## Rules
 
@@ -36,6 +36,7 @@ Help the user see and choose interface directions before implementation. This wo
 - Preserve the selected image, source, viewport, interaction state, data fixture, and rationale. A label alone is not a visual contract.
 - Never expose private data, internal identifiers, credentials, or sensitive environment details in screenshots.
 - Global skill handoffs are allowed, but do not hard-code or require repository-only skill names or agent role names.
+- Invoking this skill directly or through `grill-me` authorizes the parent to implement the resolved scope after every branch is verified resolved or explicitly deferred and final integration is complete. Start global `implement` in the same turn without asking for another design approval, implementation permission, or `continue`. Honor explicit planning-only or stop instructions, keep real blockers open, and do not implement deferred scope. If no resolved implementation scope remains, report that outcome rather than inventing work. Interview owners remain read-only on production code; other action permissions remain unchanged.
 
 ## DAG and parallel branch ownership
 
@@ -185,6 +186,8 @@ Implementation must reproduce and capture the same state, compare it directly, a
 
 ## Final report
 
+Record this report before the automatic implementation handoff; it is not a stopping point unless the user explicitly requested planning only or stopped the workflow, or a real blocker remains. After owner cleanup, the parent exits interview mode and starts global `implement` in the same turn with the unchanged visual contract and evidence.
+
 ```markdown
 ## Shared visual understanding
 
@@ -211,7 +214,8 @@ Implementation must reproduce and capture the same state, compare it directly, a
 - feature name, session slug, parent Grill Me slug, and resolved/deferred branch IDs
 - aggregate decision-tree/DAG handoff, qualified branch IDs, original owner artifact paths, and required current visual evidence
 
-## Next step
+## Handoff status
 
-- the globally installed `implement` skill, revisit a branch, or stop
+- global implement started automatically with the verified visual contract
+- or explicit planning-only/stop instruction or unresolved blocker preventing handoff
 ```

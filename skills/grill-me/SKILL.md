@@ -39,6 +39,7 @@ Use a browser interview page for every branch. Keep the interaction model consis
 - **No fake consensus** — keep unresolved branches open or explicitly defer them.
 - **Separate concept visuals from UI variants** — Mermaid, inline HTML, and images in this skill explain a plan; they are not implementation candidates. Send visual UI decisions to the globally installed `ui-ux-grill-me` skill.
 - **Global handoffs only** — global skill handoffs are allowed, but do not hard-code or require repository-only skill names or agent role names.
+- **Automatic implementation handoff** — invoking this skill authorizes the parent to continue into implementation of the resolved scope after every branch is verified resolved or explicitly deferred and final integration is complete. Do not ask for another plan approval, implementation permission, or `continue`. Start global `ui-ux-grill-me` first when visual decisions are needed; otherwise start global `implement` in the same turn. Honor explicit planning-only or stop instructions, keep real blockers open, and do not implement deferred scope. Interview owners remain read-only on production code; the parent exits interview mode before implementation. Other action permissions remain unchanged.
 
 ## Browser question page
 
@@ -188,7 +189,7 @@ global `grill-me` plan decisions → global `ui-ux-grill-me` visual contract whe
 
 ### 4. Closeout
 
-Summarize shared understanding, resolved decisions, deferred decisions, evidence, remaining risks, and the next workflow.
+Record shared understanding, resolved decisions, deferred decisions, evidence, remaining risks, and the automatic handoff below. This closeout is not a stopping point: after cleanup, continue into the next skill in the same turn unless explicitly limited to planning or genuinely blocked.
 
 Each owner stops only its own save server after its final response is recorded or before returning a blocker. The parent verifies every owner session's cleanup and closes only its owned Herdr resources after collecting results. If an owner exits without cleanup, recover only its assigned session through `stop-server.mjs`, then stop its server Monitor; never kill an unrelated or guessed process:
 
@@ -239,11 +240,12 @@ For every third-party claim, use official-source research through the required H
 - var/<feature-name>/grill-me/<slug>/decision-tree.md
 - each owner session's tree and response-*.json, linked by qualified branch ID
 
-## Suggested next step
+## Handoff status
 
-- a globally installed skill: ui-ux-grill-me / implement / design-council / research / none
+- next global skill started automatically: ui-ux-grill-me / implement
+- or explicit planning-only/stop instruction or unresolved blocker preventing handoff
 ```
 
 ## Handoff
 
-After the user approves the plan, move every branch out of Open and list it under Resolved branches or Deferred. Exit grill-me before production implementation. Hand off the feature name, parent and owner session slugs, DAG, aggregate decision-tree path, qualified-ID-to-original-evidence paths, every resolved branch ID with its acceptance criteria, and every deferred branch ID unchanged to the globally installed `implement` skill. If the plan contains UI decisions, hand off the same parent slug, DAG, aggregate decision tree and original owner artifact paths to the globally installed `ui-ux-grill-me` skill; do not ask `implement` to infer direction from prose. Implementation must verify every resolved branch before Agent Review starts; deferred branches are not requirements. Give reviewers the decision tree and current implementation evidence directly, then run the repository's required quality, visual, behavior, and review checks before commit or pull request.
+After every branch is verified resolved or explicitly deferred and final integration is complete, list every branch under Resolved branches or Deferred. Exit grill-me and automatically start the next global skill in the same turn without requesting additional approval, unless the user explicitly requested planning only or stopped the workflow. If no resolved implementation scope remains, report that outcome rather than inventing work. Hand off the feature name, parent and owner session slugs, DAG, aggregate decision-tree path, qualified-ID-to-original-evidence paths, every resolved branch ID with its acceptance criteria, and every deferred branch ID unchanged to the globally installed `implement` skill. If the plan contains UI decisions, hand off the same parent slug, DAG, aggregate decision tree and original owner artifact paths to the globally installed `ui-ux-grill-me` skill; do not ask `implement` to infer direction from prose. Implementation must verify every resolved branch before Agent Review starts; deferred branches are not requirements. Give reviewers the decision tree and current implementation evidence directly, then run the repository's required quality, visual, behavior, and review checks before commit or pull request.

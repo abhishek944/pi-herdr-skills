@@ -1,13 +1,13 @@
 ---
 name: commit-and-merge
-description: "Manual-invoke only. Commit requested repository changes and merge into the default branch, with version bumps and Git tags only when the repository already uses those conventions."
+description: "Manual-invoke only. Commit requested repository changes and merge into the default branch, automatically handling version bumps and local release tags according to established repository conventions without a separate user request."
 compatibility: Requires a Git repository.
 disable-model-invocation: true
 ---
 
 # Commit and Merge
 
-Use only when the user explicitly asks to commit and merge.
+Use only when the user explicitly asks to commit and merge or invokes this skill. That invocation authorizes applicable local version bumps and release tags as part of the workflow; do not require a separate request or confirmation for either. Honor explicit user instructions to skip them. Pushing, publishing, and other remote operations still require permission.
 
 Before replying to the user, follow the global `talk-human` skill.
 
@@ -31,12 +31,12 @@ When available, use `WorkCreate`/`WorkUpdate` and `TodoCreate`/`TodoUpdate` to k
 ## Workflow
 
 1. Identify the requested commit set and the repository's actual default branch. Inspect existing versioning and release-tag conventions; determine which steps apply, which are skipped, and which are automation-owned.
-2. When an established convention calls for a manual bump, choose the next version using that policy and the requested changes, or ask if unclear. Use the existing bump mechanism and update only the required version files, lockfiles, and release notes. Include these changes in the requested commit set. If the repository requires a different release order, follow it rather than inventing one.
+2. Automatically perform any version bump that is not automation-owned when the established convention calls for it; do not wait for the user to request a bump. Choose the next version using that policy and the requested changes, or ask only if the policy or release scope is unclear. Use the existing bump mechanism and update only the required version files, lockfiles, and release notes. Include these changes in the requested commit set. If the repository requires a different release order, follow it rather than inventing one.
 3. Recheck the staged diff, including any version changes, and run only required checks.
 4. Commit with a concise message matching repository style.
 5. If already on the default branch, no merge is needed. Otherwise merge safely into the default branch without pulling or rebasing unless authorized.
 6. If conflicts or required checks fail, stop, explain them, and wait for the user's decision; do not create a release tag.
-7. After a successful merge (or commit on the default branch), create a release tag only when the established convention calls for a manual tag. Verify that the final commit contains the intended release version, use the existing tag name, type, signing, and target conventions, and check for a local name collision. If tag availability requires contacting a remote, ask permission first. Stop on a collision or tag failure; do not undo the successful commit or merge, and report the remaining step.
+7. After a successful merge (or commit on the default branch), automatically create the local release tag when the established convention calls for a tag that is not automation-owned; do not wait for a separate user request or confirmation. Verify that the final commit contains the intended release version, use the existing tag name, type, signing, and target conventions, and check for a local name collision. If tag availability requires contacting a remote, ask permission first. Stop on a collision or tag failure; do not undo the successful commit or merge, and report the remaining step.
 
 ## Files
 

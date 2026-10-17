@@ -564,7 +564,7 @@
     },
     {
       "path": "skills/commit-and-merge/SKILL.md",
-      "sha256": "5832e4174599f2a7253d06cc8062b8afcc2fefc5ed0f2ae2330d7d2591ca5f76",
+      "sha256": "f37bf936d5ef167baf1b02f721c00edd8e6cd721e4d9dac4f29d49d90f1547d4",
       "executable": false
     },
     {
@@ -579,7 +579,7 @@
     },
     {
       "path": "skills/grill-me/SKILL.md",
-      "sha256": "369a2f99834c116886a906bf51c709a8fc0912d2cd7d267dea1e09b7f4a85251",
+      "sha256": "cf05979c055bd8a818e7ee1202732c15f7a4615bb5a1ecfe5cd85e004733f05e",
       "executable": false
     },
     {
@@ -669,7 +669,7 @@
     },
     {
       "path": "skills/ui-ux-grill-me/SKILL.md",
-      "sha256": "eec447e9d33cdf568171105458117aadc546b177229f90cc7f3e292bc9e545ff",
+      "sha256": "6e7f15b7499a65fc48e35d9a841c0388425ae876d3ff4a470b45f82c862939b1",
       "executable": false
     },
     {
