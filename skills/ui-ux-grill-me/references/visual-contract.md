@@ -22,6 +22,12 @@ user's written modification overrides the screenshot. The implementation mechani
 (React component structure, CSS organization, data plumbing, and accessibility
 details) may differ as long as the visible contract and behavior are preserved.
 
+## Multiple selections
+
+With `selectionMode: "multiple"`, preserve `selectedIds`, `selectedLabels`, and every `visualContracts` entry from the original response. Each entry retains its screenshot, source, source artifact, and shared comparison contract. Legacy singular fields are null when more than one choice is selected; this is not comments-only rejection.
+
+Multiple selected screenshots are not automatically one authoritative visual contract. Keep the branch open, clarify what to combine, resolve contradictions, and show a coherent combined browser-rendered candidate in a single-select follow-up for user acceptance. That accepted combined screenshot and source become authoritative; preserve original selections and user rationale as supporting evidence. Never silently pick the first selection or hand conflicting screenshots to implementation as an already resolved design.
+
 ## Exact-state implementation gate
 
 The implementation is incomplete until it proves the selected design against the

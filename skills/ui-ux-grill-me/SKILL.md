@@ -28,6 +28,7 @@ Help the user see and choose interface directions, then automatically implement 
 - Change one primary design axis per decision branch.
 - Include the current UI as a baseline when it exists.
 - Offer enough distinct options to make the decision meaningful, usually three to six. Include at least one conservative and one unconventional direction when appropriate.
+- Choose `selectionMode: "single"` (default) for mutually exclusive designs and `"multiple"` when compatible design choices or refinements can coexist. The AI should offer multiple when useful, not require combinations to be typed in comments. Do not combine incompatible alternatives as if they were additive.
 - Comments-only rejection is valid; never force a selection.
 - Keep one decision open per branch owner, not globally. Independent owners open separate concurrent browser interviews and collect their own responses with `wait-for-selection.mjs` in the same turn; never substitute a chat question for the wait script.
 - Keep the save server alive on a Monitor — preflight starts the save server when needed. Immediately confirm it with `MonitorList`; if no monitor covers the save server, register it with `MonitorCreate` (with an `onDone` wake that re-checks the pending branch). Renew the inactivity timeout with `MonitorUpdate` during long waits. Never poll with shell sleep loops. Stop only the owner's server after its final response is recorded or before returning a blocker, followed by its server Monitor.
@@ -135,7 +136,13 @@ node <skill-root>/scripts/wait-for-selection.mjs \
 A browser Submit is the only thing that writes `selection-B<n>.json`. Keep the save-server Monitor active while waiting. On timeout, verify the server is still reachable (`MonitorList` + HTTP 200), renew with `MonitorUpdate`, and wait again — never treat a timeout as an answer and never skip to chat.
 10. Record the response in the owner's local visual decision tree. Rework comments-only rejection, follow answer-driven children, and continue until the assigned tree is resolved or explicitly deferred; return evidence to the parent for integration.
 
-Start from `templates/example-options.json`; its top-level `contract` is required and is copied unchanged into the saved selection. The bundled helpers can be used as follows:
+Start from `templates/example-options.json`; its top-level `contract` is required and is copied unchanged into each saved visual contract. Set top-level `selectionMode` to `"single"` or `"multiple"` per question; omission defaults to single, and other values are rejected. Multiple mode uses independently toggleable checkboxes/cards with mouse and keyboard support. Clear selection removes all choices without erasing comments; comments-only submission remains valid.
+
+Saved responses include `selectionMode` plus `selectedIds`, `selectedLabels`, and `visualContracts` arrays in displayed option order, preserving every selected screenshot and source. Read arrays first, with legacy `selected`, `label`, and `visualContract` fallback only when arrays are absent. Compatibility scalar fields and singular visual contract are populated only for exactly one choice, otherwise null. `submissionType: "selection"` means one or more choices; comments-only has empty arrays.
+
+When several variants are selected, record every choice and its provenance, but keep the branch open for synthesis. Clarify which parts should combine, resolve conflicts, and present a coherent combined browser-rendered candidate for user acceptance in a single-select follow-up. Do not treat several different screenshots as one authoritative implementation contract or silently choose the first selection. Preserve original selections alongside the accepted combined screenshot/source and rationale.
+
+The bundled helpers can be used as follows:
 
 ```bash
 node <skill-root>/scripts/generate-comparison.mjs \

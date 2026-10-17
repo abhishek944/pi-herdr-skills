@@ -34,7 +34,10 @@ while (Date.now() < deadline) {
   if (fs.existsSync(output)) {
     try {
       const value = JSON.parse(fs.readFileSync(output, "utf8"));
-      if (value.selected || value.response?.trim()) {
+      const hasSelection = Array.isArray(value.selectedIds)
+        ? value.selectedIds.length > 0
+        : Boolean(value.selected);
+      if (hasSelection || value.response?.trim()) {
         console.log(JSON.stringify(value));
         process.exit(0);
       }

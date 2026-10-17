@@ -50,6 +50,7 @@ For each branch `B<n>`:
 ```json
 {
   "context": "Why this choice matters, grounded in evidence.",
+  "selectionMode": "single",
   "recommended": "A",
   "visual": {
     "type": "mermaid",
@@ -81,7 +82,11 @@ For each branch `B<n>`:
 - `html` — a focused inline visual when Mermaid cannot express the concept.
 - `image` — an existing PNG/JPG under the session directory.
 
-Use 2–6 options. Free-form response is always available, including comments-only rejection.
+Use 2–6 options. Set `selectionMode` per question: `"single"` (default) for mutually exclusive alternatives; `"multiple"` for compatible choices such as capabilities, requirements, or priorities that can coexist. The AI should choose multiple when the decision benefits from selecting more than one option; do not force the user to describe combinations in comments. The page shows radio buttons for single and checkboxes for multiple. Keep incompatible alternatives or a mutually exclusive Defer choice in a separate single-select question rather than mixing them into an additive set.
+
+Saved responses include `selectionMode` plus `selectedIds` and `selectedLabels` arrays in displayed option order. Use these arrays as the answer; fall back to legacy `selected`/`label` only when arrays are absent in an older session. Compatibility scalar fields are populated only for exactly one choice, otherwise null. `submissionType: "selection"` means one or more choices; comments-only has empty arrays. Record every selected choice and follow up on conflicts before resolving the branch.
+
+Free-form response is always available, including comments-only rejection. After choosing one or more options, **Clear selection** removes all choices without erasing written feedback and focuses the response field. Submit remains enabled only when an option is selected or non-empty feedback is present.
 
 2. Generate the page:
 

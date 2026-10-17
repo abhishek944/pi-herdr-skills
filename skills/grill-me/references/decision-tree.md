@@ -88,7 +88,8 @@ Each browser question should:
 
 - Use local helper branch id `B<n>` and write `response-B<n>.json` in its unique owner session on Submit; show the level and owner/decision in the title.
 - State why the branch matters and include the evidence-backed recommendation.
-- Provide **2–6 options** plus a free-form response; comments-only rejection is valid.
+- Provide **2–6 options** plus a free-form response; comments-only rejection is valid. Choose `selectionMode: "multiple"` for compatible additive options and `"single"` for mutually exclusive alternatives.
+- Record all `selectedIds`/`selectedLabels` (legacy scalar fallback only when arrays are absent); do not mistake a multi-selection with `selected: null` for rejection. Resolve conflicting selections through follow-up questions.
 - Add a Mermaid, HTML, or image explanation when it materially clarifies a core concept.
 - Run the waiter immediately so the user never needs to type `continue`.
 

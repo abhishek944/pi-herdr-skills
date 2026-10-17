@@ -1,4 +1,5 @@
 {
+  "selectionMode": "single",
   "recommended": "A",
   "contract": {
     "route": "<ROUTE>",

@@ -1,6 +1,6 @@
 # pi-herdr-skills
 
-A portable collection of 20 global [Pi](https://pi.dev/) skills for planning, implementation, review, browser and desktop work, visual explanations, and [Herdr](https://herdr.dev/)-hosted Pi agents.
+A portable collection of 21 global [Pi](https://pi.dev/) skills for planning, implementation, review, browser and desktop work, visual explanations, and [Herdr](https://herdr.dev/)-hosted Pi agents.
 
 > [!WARNING]
 > Pi extensions run with your user permissions, and skills can instruct an agent to run commands. Review this repository and every extension you install before enabling it.
@@ -22,7 +22,7 @@ cd pi-herdr-skills
 ./scripts/install.sh
 ```
 
-The installer copies all 20 skills into the shared global `~/.agents/skills/` directory (discovered by Pi, Codex, and OpenCode). It does not require or install a permission extension or policy. It refuses to overwrite a different managed skill. If you intentionally replace conflicts, `./scripts/install.sh --force` backs up the existing files under `~/.pi/agent/skills-backups/` first.
+The installer copies all 21 skills into the shared global `~/.agents/skills/` directory (discovered by Pi, Codex, and OpenCode). It does not require or install a permission extension or policy. It refuses to overwrite a different managed skill. If you intentionally replace conflicts, `./scripts/install.sh --force` backs up the existing files under `~/.pi/agent/skills-backups/` first.
 
 Restart Pi, or run `/reload` in an existing Pi session. See the official [skills documentation](https://pi.dev/docs/latest/skills) for Pi's discovery rules.
 
@@ -78,6 +78,7 @@ If an installed skill was modified, uninstall refuses to remove it unless you ad
 | `read-flows` | Finds and reads repository flow documentation before relevant changes. |
 | `retro` | Reviews a coding session for ways to improve the agent's working environment; invoke explicitly with `/skill:retro`. |
 | `ui-ux-grill-me` | Captures an interface and resolves independent UX branches in parallel browser interviews. |
+| `ui-ux-testing` | Finds clipping, covered overlays, overflow and interaction regressions in real layouts, with reproducible visual evidence. |
 | `visual-explainer` | Produces self-contained HTML explanations, diagrams, comparisons, and data views. |
 
 `codebase-design` is the shared design reference for relevant `design-council`, `implement`, and `agent-review` work. It asks for a short design contract before non-trivial abstraction changes, without forcing extra agents or overriding test permissions. It is adapted from Matt Pocock's guidance; provenance and the MIT license are bundled with the skill. Run `/skill:codebase-design` to invoke it directly.

@@ -122,6 +122,11 @@ const configPath = path.isAbsolute(args.options)
   ? args.options
   : path.resolve(args.options);
 const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+const selectionMode = config.selectionMode === undefined ? "single" : config.selectionMode;
+if (!["single", "multiple"].includes(selectionMode)) {
+  throw new Error('selectionMode must be "single" or "multiple".');
+}
+const multiple = selectionMode === "multiple";
 
 const contractKeys = [
   "route",
@@ -248,8 +253,8 @@ const optionCards = config.options
       : "";
 
     return `
-    <article class="option-card" data-id="${escapeHtml(opt.id)}" role="radio" aria-checked="false" tabindex="0">
-      <input type="radio" name="variant" value="${escapeHtml(opt.id)}" />
+    <article class="option-card" data-id="${escapeHtml(opt.id)}" role="${multiple ? "checkbox" : "radio"}" aria-label="${escapeHtml(opt.label)}" aria-checked="false" tabindex="0">
+      <input type="${multiple ? "checkbox" : "radio"}" name="variant" value="${escapeHtml(opt.id)}" tabindex="-1" aria-hidden="true" />
       <div class="option-inner">
         <div class="option-head">
           <span class="option-id">${escapeHtml(opt.id)}</span>
@@ -324,6 +329,7 @@ const html = `<!DOCTYPE html>
       flex-direction: column;
     }
     .option-card:hover .option-inner { border-color: rgba(255,255,255,0.18); }
+    .option-card:focus-visible { outline: 2px solid var(--sky); outline-offset: 4px; border-radius: 14px; }
     .option-card:has(input:checked) .option-inner {
       border-color: var(--accent);
       box-shadow: 0 0 0 1px var(--accent), 0 8px 32px rgba(0,0,0,0.35);
@@ -459,9 +465,9 @@ const html = `<!DOCTYPE html>
   <div class="wrap">
     <p class="eyebrow">ui-ux-grill-me · ${escapeHtml(args.session)} · ${escapeHtml(args.branch)}</p>
     <h1>${escapeHtml(args.question)}</h1>
-    <p class="meta">Choose a variant, or leave all choices unselected and submit comments if none feel right.</p>
+    <p class="meta">${multiple ? "Select all compatible directions that apply. Use comments to explain how they should combine." : "Choose one variant."} Leave all choices unselected and submit comments if none feel right.</p>
     <form id="form">
-      <div class="grid" role="radiogroup" aria-label="Design directions">${optionCards}</div>
+      <div class="grid" role="${multiple ? "group" : "radiogroup"}" aria-label="Design directions">${optionCards}</div>
       <div class="actions">
         <div class="why">
           <label for="why">Comments (optional with a selection; required if none are selected)</label>
@@ -497,10 +503,17 @@ const html = `<!DOCTYPE html>
       clearSelection.classList.toggle("visible", Boolean(selected));
     }
 
+    const multiple = ${JSON.stringify(multiple)};
+
     function selectCard(card) {
-      cards.forEach((candidate) => candidate.setAttribute("aria-checked", "false"));
-      card.setAttribute("aria-checked", "true");
-      card.querySelector("input").checked = true;
+      const input = card.querySelector("input");
+      if (multiple) {
+        input.checked = !input.checked;
+      } else {
+        cards.forEach((candidate) => { candidate.querySelector("input").checked = false; });
+        input.checked = true;
+      }
+      cards.forEach((candidate) => candidate.setAttribute("aria-checked", String(candidate.querySelector("input").checked)));
       updateSubmitState();
       status.textContent = "";
       status.className = "status";
@@ -512,7 +525,7 @@ const html = `<!DOCTYPE html>
         selectCard(card);
       });
       card.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
+        if (event.target !== card || (event.key !== "Enter" && event.key !== " ")) return;
         event.preventDefault();
         selectCard(card);
       });
@@ -544,32 +557,37 @@ const html = `<!DOCTYPE html>
 
     document.getElementById("form").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const selected = document.querySelector('input[name="variant"]:checked');
+      const selectedIds = Array.from(document.querySelectorAll('input[name="variant"]:checked'), input => input.value);
       const comments = why.value.trim();
-      if (!selected && !comments) return;
-      const selectedOption = selected ? variantMetadata[selected.value] : null;
+      if (!selectedIds.length && !comments) return;
+      const visualContracts = selectedIds.map(id => {
+        const option = variantMetadata[id];
+        return {
+          branch: ${JSON.stringify(args.branch)},
+          question: ${JSON.stringify(args.question)},
+          variantId: option.id,
+          label: option.label,
+          category: option.category,
+          screenshot: option.image,
+          source: option.source,
+          sourceArtifact: option.sourceArtifact,
+          contract: ${JSON.stringify(config.contract)},
+        };
+      });
       confirm.disabled = true;
       status.textContent = "Saving…";
       const payload = {
         questionId: ${JSON.stringify(args.branch)},
         sessionSlug: ${JSON.stringify(args.session)},
-        selected: selected?.value || null,
-        label: selected ? (labels[selected.value] || selected.value) : null,
-        submissionType: selected ? "selection" : "comments-only",
+        selectionMode: ${JSON.stringify(selectionMode)},
+        selectedIds,
+        selectedLabels: selectedIds.map(id => labels[id] || id),
+        selected: selectedIds.length === 1 ? selectedIds[0] : null,
+        label: selectedIds.length === 1 ? (labels[selectedIds[0]] || selectedIds[0]) : null,
+        submissionType: selectedIds.length ? "selection" : "comments-only",
         why: comments,
-        visualContract: selectedOption
-          ? {
-              branch: ${JSON.stringify(args.branch)},
-              question: ${JSON.stringify(args.question)},
-              variantId: selectedOption.id,
-              label: selectedOption.label,
-              category: selectedOption.category,
-              screenshot: selectedOption.image,
-              source: selectedOption.source,
-              sourceArtifact: selectedOption.sourceArtifact,
-              contract: ${JSON.stringify(config.contract)},
-            }
-          : null,
+        visualContracts,
+        visualContract: visualContracts.length === 1 ? visualContracts[0] : null,
         timestamp: new Date().toISOString(),
       };
       try {
@@ -585,7 +603,7 @@ const html = `<!DOCTYPE html>
       } catch (err) {
         status.textContent = "Save failed: " + err.message + " (is save-server running?)";
         status.className = "status err";
-        confirm.disabled = false;
+        updateSubmitState();
       }
     });
   </script>

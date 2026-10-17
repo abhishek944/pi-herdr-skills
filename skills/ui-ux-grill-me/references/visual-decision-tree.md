@@ -55,7 +55,7 @@ Dependency IDs must exist and the graph must be acyclic. Keep readiness/status h
 
 ## Resolved branches
 
-| ID  | Choice | Variant id | Why | Evidence          |
+| ID  | Choice | Variant id(s) | Why | Evidence          |
 | --- | ------ | ---------- | --- | ----------------- |
 | <owner-slug>:B1 | … | B or none | … | original owner selection-B1.json and screenshot/source paths |
 
@@ -91,7 +91,7 @@ Dependency IDs must exist and the graph must be acyclic. Keep readiness/status h
 2. **One comparison per owner** — each owner opens a separate visible browser interview, waits for feedback, and follows local children automatically. Browser tabs/windows across owners may compete; artifact directories, ports and mutable capture state must not.
 3. **Current first** — option A is always the captured baseline unless user requests otherwise.
 4. **One axis per branch** — e.g. layout OR CTA prominence, not both.
-5. **Record feedback JSON** — keep local helper IDs `B<n>` and qualify them as `<owner-slug>:B<n>` in the aggregate tree. For an accepted selection, copy `selected`, `label`, and `why` from `selection-B<n>.json` into Resolved. If `submissionType` is `comments-only`, keep the branch open/rework-needed with variant `none` until a revised choice is accepted or the user explicitly defers it. Only user-approved deferrals enter Deferred; they do not satisfy required decision dependencies.
+5. **Record feedback JSON** — keep local helper IDs `B<n>` and qualify them as `<owner-slug>:B<n>` in the aggregate tree. Read `selectedIds`, `selectedLabels`, `visualContracts`, and `why` from `selection-B<n>.json`, falling back to legacy scalar fields only when arrays are absent. Preserve all selections and source paths. Multiple selected variants keep the branch open for synthesis: clarify how parts combine and get acceptance of a coherent combined browser-rendered candidate in a single-select follow-up before moving it to Resolved. If `submissionType` is `comments-only`, keep the branch open/rework-needed with variant `none` until a revised choice is accepted or the user explicitly defers it. Only user-approved deferrals enter Deferred; they do not satisfy required decision dependencies.
 6. **Deferral is explicit** — do not skip branches silently.
 
 ## Branch quality bar
@@ -104,6 +104,7 @@ Each comparison page should include:
 - Source provenance for every option: `live-route` or `mockup-html`, source path, viewport, and route when applicable
 - Expand control for every viewport image
 - Recommended variant noted in `generate-comparison` config (`recommended` field)
+- Set `selectionMode: "multiple"` when compatible choices can coexist, otherwise `"single"` (default); record every selected variant rather than just the first
 - Comments field that permits comments-only submission when no option is acceptable
 
 ## Suggested branch axes (landing page)
