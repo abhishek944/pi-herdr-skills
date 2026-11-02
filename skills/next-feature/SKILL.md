@@ -90,10 +90,10 @@ Use the output below. Recommend the next action without asking a question or lau
 
 ## Files
 
-When a retained report helps, write only under:
+When a retained report helps, follow global `implement` and write only inside the owning task's canonical directory (`taskDir`). Reuse caller tracking for the same outcome; standalone work establishes real session/Work/Task ownership first. Delegated work uses its own IDs below the exact supplied parent task directory, never a feature-named output root.
 
 ```text
-var/<feature-name>/next-feature-details/
+<taskDir>/recommendation.md
 ```
 
 Use one `recommendation.md` for the decision brief and source links. Add `evidence.md` only when the evidence would overwhelm the brief. Do not create runtime state or raw logs.

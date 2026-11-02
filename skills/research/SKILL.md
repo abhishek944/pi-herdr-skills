@@ -36,14 +36,14 @@ When available, use `WorkCreate`/`WorkUpdate` and `TodoCreate`/`TodoUpdate` to k
 
 ## Optional diagram handoff
 
-When a source-backed system map, request sequence, data flow, or state diagram would materially clarify the findings, read and follow the global `archify` skill. Pass the feature name, requested slice, verified source paths and line ranges, repository revision, and explicit unknowns. Keep investigation responsible for facts; diagram generation does not authorize production edits. Proposed behavior must be labeled separately, and uncommitted bytes must not be cited as verified `HEAD` evidence. Reuse the current work and todo; keep diagram artifacts under `var/<feature-name>/archify-details/`. Skip diagrams when prose is clearer.
+When a source-backed system map, request sequence, data flow, or state diagram would materially clarify the findings, read and follow the global `archify` skill. Pass the feature name, requested slice, verified source paths and line ranges, repository revision, and explicit unknowns. Keep investigation responsible for facts; diagram generation does not authorize production edits. Proposed behavior must be labeled separately, and uncommitted bytes must not be cited as verified `HEAD` evidence. Reuse the current work and todo; keep diagram artifacts inside the canonical owning task directory from global `implement` and pass their exact paths back to the caller. Skip diagrams when prose is clearer.
 
 ## Files
 
-When investigation notes are useful, write only under:
+When investigation notes are useful, follow global `implement` and write only inside the owning task's canonical directory (`taskDir`). Reuse caller tracking for the same assignment; standalone work establishes real session/Work/Task ownership first. Delegated work appends its own IDs below the exact supplied parent task directory. Feature names remain descriptions, not directory ownership keys.
 
 ```text
-var/<feature-name>/research-details/
+<taskDir>/evidence.md
 ```
 
 Suggested files are `evidence.md` and `proposed-fix.md`. Do not create machine state or launch logs.

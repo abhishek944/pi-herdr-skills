@@ -2,19 +2,19 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { resolveSessionSlug } from "./session-path.mjs";
+import { insideTaskDir, resolveTaskDir, resolveWriteTarget, taskLabel } from "./task-dir.mjs";
 
 function parseArgs(argv) {
   const out = {
-    feature: "",
-    session: "",
+    dir: "",
+    label: "",
     branch: "B1",
     question: "",
     options: "",
   };
   for (let i = 2; i < argv.length; i += 1) {
-    if (argv[i] === "--feature" && argv[i + 1]) out.feature = argv[++i];
-    else if (argv[i] === "--session" && argv[i + 1]) out.session = argv[++i];
+    if (argv[i] === "--dir" && argv[i + 1]) out.dir = argv[++i];
+    else if (argv[i] === "--label" && argv[i + 1]) out.label = argv[++i];
     else if (argv[i] === "--branch" && argv[i + 1]) out.branch = argv[++i];
     else if (argv[i] === "--question" && argv[i + 1]) out.question = argv[++i];
     else if (argv[i] === "--options" && argv[i + 1]) out.options = argv[++i];
@@ -30,39 +30,31 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-function imageDataUri(sessionDir, relativePath) {
-  const full = path.resolve(sessionDir, relativePath);
-  if (!fs.existsSync(full)) return null;
-  const root = fs.realpathSync(sessionDir);
-  const resolved = fs.realpathSync(full);
-  const relative = path.relative(root, resolved);
-  if (
-    relative === ".." ||
-    relative.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relative)
-  ) {
-    return null;
-  }
-  const ext = path.extname(resolved).toLowerCase();
+function imageDataUri(taskDir, relativePath) {
+  const found = insideTaskDir(taskDir, relativePath);
+  if (!found) return null;
+  const ext = path.extname(found.path).toLowerCase();
   const mime =
     ext === ".svg"
       ? "image/svg+xml"
       : ext === ".jpg" || ext === ".jpeg"
         ? "image/jpeg"
         : "image/png";
-  return `data:${mime};base64,${fs.readFileSync(resolved).toString("base64")}`;
+  return `data:${mime};base64,${fs.readFileSync(found.path).toString("base64")}`;
 }
 
 const args = parseArgs(process.argv);
-if (!args.feature || !args.session || !args.question || !args.options) {
+if (!args.dir || !args.question || !args.options) {
   console.error(
-    'Usage: node generate-question.mjs --feature <feature-name> --session <slug> --branch B1 --question "..." --options <json>',
+    'Usage: node generate-question.mjs --dir <canonical-task-dir> [--label <owner label>] --branch B1 --question "..." --options <json>',
   );
   process.exit(1);
 }
 
-const sessionDir = resolveSessionSlug(args.feature, args.session);
-const outputDir = path.join(sessionDir, "questions");
+const taskDir = resolveTaskDir(args.dir, { requireExisting: false });
+const label = args.label.trim() || taskLabel(taskDir);
+const taskDirRelative =
+  path.relative(process.cwd(), taskDir).split(path.sep).join("/") || ".";
 const config = JSON.parse(fs.readFileSync(path.resolve(args.options), "utf8"));
 if (
   !Array.isArray(config.options) ||
@@ -94,7 +86,7 @@ if (config.visual?.type === "mermaid" && config.visual.content) {
 } else if (config.visual?.type === "html" && config.visual.content) {
   visual = `<section class="concept" aria-label="Concept explanation">${config.visual.content}</section>`;
 } else if (config.visual?.type === "image" && config.visual.path) {
-  const uri = imageDataUri(sessionDir, config.visual.path);
+  const uri = imageDataUri(taskDir, config.visual.path);
   if (!uri) throw new Error(`Visual image not found: ${config.visual.path}`);
   visual = `<section class="concept"><img src="${uri}" alt="${escapeHtml(config.visual.alt || "Concept explanation")}" /></section>`;
 }
@@ -118,7 +110,7 @@ const html = `<!doctype html>
 <title>Grill me · ${escapeHtml(args.branch)}</title>
 <style>
 :root{color-scheme:dark;--bg:#0f1419;--panel:#18202a;--line:rgba(255,255,255,.11);--text:#edf2f7;--muted:#a7b0bc;--accent:#86efac}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% -10%,rgba(134,239,172,.10),transparent 34%),var(--bg);color:var(--text);font:15px/1.5 system-ui,sans-serif}.wrap{width:min(920px,calc(100% - 32px));margin:0 auto;padding:40px 0 64px}.eyebrow{color:#7dd3fc;font:12px ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}h1{font-size:clamp(25px,4vw,38px);line-height:1.15;margin:10px 0 12px}.context{color:var(--muted);max-width:760px;margin:0 0 24px}.concept{margin:20px 0 26px;padding:20px;border:1px solid var(--line);border-radius:16px;background:rgba(24,32,42,.72);overflow:auto}.concept img{display:block;max-width:100%;margin:auto}.choices{display:grid;gap:10px}.option{display:flex;gap:14px;align-items:flex-start;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--panel);cursor:pointer}.option:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}.option input{margin-top:5px}.option-id{color:var(--accent);font:13px ui-monospace,monospace}.option-copy{display:grid;gap:4px}.option-copy small{color:var(--muted)}.response{display:grid;gap:7px;margin-top:20px;color:var(--muted)}textarea{width:100%;min-height:100px;padding:13px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text);font:inherit;resize:vertical}.actions{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-top:16px}#clear-selection{border:1px solid var(--line);background:var(--panel);color:var(--text)}button{padding:11px 18px;border:0;border-radius:10px;background:var(--accent);color:#07110b;font:600 15px system-ui;cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}.status{color:var(--muted)}.status.ok{color:var(--accent)}.status.err{color:#fca5a5}@media(max-width:560px){.wrap{padding-top:24px}.option{padding:13px}.concept{padding:12px}}
-</style></head><body><main class="wrap"><div class="eyebrow">grill-me · ${escapeHtml(args.session)} · ${escapeHtml(args.branch)}</div><h1>${escapeHtml(args.question)}</h1><p class="context">${escapeHtml(config.context || "Choose the direction that best matches your intent, or respond in your own words.")}</p><p class="context">${multiple ? "Select all options that apply." : "Select one option."} You can also leave every option unselected and submit written feedback.</p>${visual}<form id="form"><div class="choices">${cards}</div><label class="response" for="response">Response or refinement<textarea id="response" placeholder="Explain your choice, combine options, or reject them all…"></textarea></label><div class="actions"><button id="clear-selection" type="button" hidden>Clear selection</button><button id="submit" type="submit" disabled>Submit response</button><span id="status" class="status" role="status"></span></div></form></main>
+</style></head><body><main class="wrap"><div class="eyebrow">grill-me · ${escapeHtml(label)} · ${escapeHtml(args.branch)}</div><h1>${escapeHtml(args.question)}</h1><p class="context">${escapeHtml(config.context || "Choose the direction that best matches your intent, or respond in your own words.")}</p><p class="context">${multiple ? "Select all options that apply." : "Select one option."} You can also leave every option unselected and submit written feedback.</p>${visual}<form id="form"><div class="choices">${cards}</div><label class="response" for="response">Response or refinement<textarea id="response" placeholder="Explain your choice, combine options, or reject them all…"></textarea></label><div class="actions"><button id="clear-selection" type="button" hidden>Clear selection</button><button id="submit" type="submit" disabled>Submit response</button><span id="status" class="status" role="status"></span></div></form></main>
 <script>
 const form=document.getElementById("form"),submit=document.getElementById("submit"),response=document.getElementById("response"),status=document.getElementById("status"),clearSelection=document.getElementById("clear-selection"),labels=${JSON.stringify(labels)};
 function selectedIds() {
@@ -143,7 +135,9 @@ form.addEventListener("submit", async (event) => {
   status.textContent = "Saving…";
   const payload = {
     questionId: ${JSON.stringify(args.branch)},
-    sessionSlug: ${JSON.stringify(args.session)},
+    sessionSlug: ${JSON.stringify(label)},
+    ownerLabel: ${JSON.stringify(label)},
+    taskDir: ${JSON.stringify(taskDirRelative)},
     selectionMode: ${JSON.stringify(selectionMode)},
     selectedIds: ids,
     selectedLabels: ids.map(id => labels[id] || id),
@@ -167,7 +161,10 @@ form.addEventListener("submit", async (event) => {
 });
 </script>${mermaidModule}</body></html>`;
 
-fs.mkdirSync(outputDir, { recursive: true });
-const out = path.join(outputDir, `question-${args.branch}.html`);
+const out = resolveWriteTarget(
+  taskDir,
+  path.join("questions", `question-${args.branch}.html`),
+);
+fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, html);
 console.log(`Wrote ${out}`);

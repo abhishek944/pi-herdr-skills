@@ -40,10 +40,10 @@ When available, use `WorkCreate`/`WorkUpdate` and `TodoCreate`/`TodoUpdate` to k
 
 ## Files
 
-If a written record is useful, write only under:
+If a written record is useful, follow global `implement` and write only inside the owning task's canonical directory (`taskDir`). Reuse existing task ownership for the same outcome; standalone work establishes real session/Work/Task IDs first. Delegated work uses its own IDs below the exact supplied parent task directory. Feature names are descriptions, not output roots.
 
 ```text
-var/<feature-name>/commit-and-merge-details/
+<taskDir>/summary.md
 ```
 
 Do not commit this folder unless the repository explicitly tracks `var/`.

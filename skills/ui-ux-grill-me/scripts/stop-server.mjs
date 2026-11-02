@@ -3,14 +3,15 @@
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
+import { resolveTaskDir } from "./task-dir.mjs";
 
 const dirIndex = process.argv.indexOf("--dir");
 const portIndex = process.argv.indexOf("--port");
 if (dirIndex < 0 || !process.argv[dirIndex + 1]) {
-  console.error("Usage: node stop-server.mjs --dir <session-dir> [--port <port>]");
+  console.error("Usage: node stop-server.mjs --dir <canonical-task-dir> [--port <port>]");
   process.exit(1);
 }
-const root = path.resolve(process.argv[dirIndex + 1]);
+const root = resolveTaskDir(process.argv[dirIndex + 1]);
 const pidFile = path.join(root, "save-server.pid");
 const portFile = path.join(root, "save-server.port");
 const port = portIndex >= 0 && process.argv[portIndex + 1]

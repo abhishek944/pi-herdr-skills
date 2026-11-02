@@ -20,7 +20,7 @@ When available, use `WorkCreate`/`WorkUpdate` and `TodoCreate`/`TodoUpdate` to k
 
 ## Format routing
 
-For a standalone architecture, workflow, sequence, data-flow, or lifecycle/state diagram, read and follow the global `archify` skill. It owns typed JSON authoring, rendering, validation, and diagram browser checks. Pass the question, feature name, inspected evidence, and any uncertainties; reuse the current work and todo. Archify artifacts belong under `var/<feature-name>/archify-details/`.
+For a standalone architecture, workflow, sequence, data-flow, or lifecycle/state diagram, read and follow the global `archify` skill. It owns typed JSON authoring, rendering, validation, and diagram browser checks. Pass the question, feature name, inspected evidence, and any uncertainties; reuse the current work and todo. Archify artifacts belong inside the canonical owning task directory established by global `implement`; hand off their exact paths rather than reconstructing a feature folder.
 
 Keep this skill for narrative explanations, reports, tables, comparisons, dashboards, and mixed-content pages. Small embedded diagrams can stay Mermaid. If Archify is unavailable, use Mermaid/HTML and disclose that Archify validation was not performed. Do not treat a passing automated browser gate as perceptual visual review.
 
@@ -45,10 +45,10 @@ Keep this skill for narrative explanations, reports, tables, comparisons, dashbo
 
 ## Files
 
-Write the page and any related assets only under:
+Follow global `implement` and write the page and related assets only inside the owning task's canonical directory (`taskDir`). Reuse caller tracking for the same outcome; standalone work establishes real session/Work/Task ownership first. Delegated work appends its own IDs below the exact supplied parent task directory. Do not create feature-named output roots.
 
 ```text
-var/<feature-name>/visual-explainer-details/
+<taskDir>/comparison.html
 ```
 
 Use a descriptive filename such as `architecture.html`, `plan.html`, or `comparison.html`. Do not write to a global diagrams folder.

@@ -3,6 +3,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { resolveTaskDir } from "./task-dir.mjs";
 
 function parseArgs(argv) {
   const out = { dir: "", branch: "B1", timeout: 1800, interval: 500 };
@@ -24,13 +25,13 @@ function sleep(ms) {
 const args = parseArgs(process.argv);
 if (!args.dir || !Number.isFinite(args.timeout) || args.timeout <= 0) {
   console.error(
-    "Usage: node wait-for-selection.mjs --dir <session-dir> --branch B1 [--timeout 1800]",
+    "Usage: node wait-for-selection.mjs --dir <canonical-task-dir> --branch B1 [--timeout 1800]",
   );
   process.exit(1);
 }
 
 const selectionPath = path.join(
-  path.resolve(args.dir),
+  resolveTaskDir(args.dir),
   `selection-${args.branch}.json`,
 );
 const deadline = Date.now() + args.timeout * 1000;

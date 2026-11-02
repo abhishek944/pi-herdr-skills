@@ -16,7 +16,7 @@ This is a design reference, not a replacement for the global workflows. Read it 
 - In `research` or `design-council`, keep production files read-only. Design advice does not authorize implementation.
 - In `implement`, work only within the approved scope and record the design in its existing plan, not a second task system.
 - In `agent-review`, inspect the actual changes and callers against the agreed contract; reviewers remain read-only.
-- Reuse the owning workflow's Work/Todo tracking and artifact directory. If invoked alone, follow the global coordination rules; optional notes belong under `var/<feature-name>/codebase-design-details/`.
+- Reuse the owning workflow's Work/Todo tracking and canonical task directory from global `implement`. If invoked alone, establish real session/Work/Task ownership first; optional notes stay inside that task directory. Delegated work appends its own IDs below the exact supplied parent task directory. Do not create a feature-named output root.
 - This skill does not authorize commits, deployment, dependency upgrades, live testing, or creating, editing, deleting, or running unit tests.
 
 ## Shared concepts
@@ -35,7 +35,8 @@ A **deep module** provides substantial useful behavior through a small interface
 6. **Justify substitution.** Reuse existing capabilities and prefer plain functions for pure decisions. Add a port or service for a real external dependency, ownership/lifecycle requirement, policy boundary, or justified variation—not a hypothetical future.
 7. **Keep internal seams internal.** Do not expose implementation collaborators merely to make them accessible to tests. Verification should observe the public contract.
 8. **Make states explicit.** Model domain invariants and invalid states with appropriate types, schemas, constraints, or discriminated unions. Prefer ordinary types and built-in utilities over clever generic machinery.
-9. **Explain only what code cannot.** Put caller-visible guarantees next to the interface and surprising rationale near the implementation. Record durable, consequential trade-offs in the repository's existing decision format.
+9. **Default to no additional runtime machinery.** Estimators, reservation pools, repeated checksums, recovery systems and blocking gates need an explicit requirement or demonstrated failure within the approved scope. Hypothetical robustness or production-readiness is not a requirement. Reuse platform and trusted-boundary guarantees instead of duplicating them; account for false refusals, latency and recovery burden. If no necessary role exists, omit the mechanism. Preserve essential authorization, untrusted-input validation and data-loss protection.
+10. **Explain only what code cannot.** Put caller-visible guarantees next to the interface and surprising rationale near the implementation. Record durable, consequential trade-offs in the repository's existing decision format.
 
 Two justified adapters are evidence for a useful seam, not a prerequisite. One implementation may still own a real dependency or resource lifecycle. Never invent a test adapter solely to justify an abstraction.
 

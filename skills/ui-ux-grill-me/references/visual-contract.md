@@ -6,15 +6,15 @@ A resolved UI/UX grill decision is implementation input, not loose inspiration.
 
 For every resolved visual branch, preserve:
 
-- the selected viewport screenshot under `var/<feature-name>/ui-ux-grill-me/<slug>/screenshots/`;
+- the selected viewport screenshot under `<taskDir>/screenshots/`, where `<taskDir>` is the owner's canonical task directory (`var/<sessionId>/<workId>/<taskId>/`, or the nested delegated triple beneath the exact parent task directory);
 - the current/baseline screenshot for the same branch;
 - the selected option's source artifact: live route, mockup HTML, or both;
 - the session image-generation art-direction reference, its prompt record, and
   the visual choices carried from it into the selected candidate;
 - the viewport size and relevant interaction state;
 - `selection-B<n>.json`, including the user's rationale and modifications;
-- the parent `dag.md` and aggregate `visual-decision-tree.md`, including verified level gates, qualified branch IDs and the parent global `grill-me` session slug;
-- each owner session's local tree and original screenshot, source and selection paths (do not flatten or rename colliding B<n> files).
+- the parent `dag.md` and aggregate `visual-decision-tree.md`, including verified level gates, qualified branch IDs and the parent Grill Me task directory;
+- each owner task directory's local tree and original screenshot, source and selection paths (do not flatten or rename colliding B<n> files; hand off exact paths rather than reconstructing them from labels).
 
 The selected screenshot is authoritative for visible hierarchy, placement, spacing,
 density, controls, states, copy, color treatment, borders, radii, and shadows. The
@@ -35,7 +35,7 @@ live product UI. The proof must use the exact selected viewport, route, panel
 dimensions, and interaction fixture—not an approximate screen, a different
 responsive breakpoint, or a different data state.
 
-Create `var/<feature-name>/ui-ux-grill-me/<slug>/implementation-visual-verification.md` containing:
+Create `<verificationTaskDir>/implementation-visual-verification.md` in the canonical task directory of the task performing verification (normally the implementing task, not the interview task), linking the original interview evidence by exact path. It contains:
 
 - selected screenshot and source artifact paths;
 - selected viewport, route, panel dimensions, and interaction fixture;
@@ -75,7 +75,7 @@ candidate remains the implementation reference.
 Pass the visual contract into the globally installed `implement` skill unchanged. Its coordinator and
 workers must read the selected screenshot, source artifact, image-generation
 reference, viewport, decision tree, and selection rationale before editing code.
-Include the feature name, parent UI/UX session slug, all owner session slugs/artifact paths, parent Grill Me slug, and resolved and
+Include the feature name, the UI/UX parent and owner task directory paths and labels, the parent Grill Me task directory, and resolved and
 deferred qualified branch IDs. The parent must reconcile selections across owners before the final contract is authoritative. The final visual decision tree must list every branch under
 Resolved or Deferred so review can verify exact coverage. Do not reconstruct a selected direction from the label or
 screenshot alone when its source artifact is available. Give final reviewers the
@@ -84,7 +84,7 @@ selected decision tree and current visual comparison directly.
 ## Post-code review
 
 After implementation, capture the same route, state, viewport, and interaction state
-again. Save the result in the repository's approved visual-review artifact location and
-run the repository's visual review process. The UI task is incomplete until the live screenshot matches the
+again. Save the result in the canonical task directory of the task performing verification
+(normally the implementing task), and run the repository's visual review process. The UI task is incomplete until the live screenshot matches the
 visual contract, user modifications are honored, the independent review has no
 accepted findings, and the repository's final behavior verification passes.

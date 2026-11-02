@@ -6,7 +6,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { openSystemBrowser } from "./open-system-browser.mjs";
-import { resolveSessionDir } from "./session-path.mjs";
+import { resolveTaskDir, resolveWriteTarget } from "./task-dir.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -74,8 +74,10 @@ function readPort(portFile) {
 }
 
 function startServer(root, requestedPort, portFile) {
+  const logPath = resolveWriteTarget(root, "save-server.log");
+  const pidPath = resolveWriteTarget(root, "save-server.pid");
   fs.rmSync(portFile, { force: true });
-  const log = fs.openSync(path.join(root, "save-server.log"), "a");
+  const log = fs.openSync(logPath, "a");
   const child = spawn(
     process.execPath,
     [path.join(here, "save-server.mjs"), "--dir", root, "--port", String(requestedPort)],
@@ -83,19 +85,19 @@ function startServer(root, requestedPort, portFile) {
   );
   fs.closeSync(log);
   child.unref();
-  fs.writeFileSync(path.join(root, "save-server.pid"), String(child.pid));
+  fs.writeFileSync(pidPath, String(child.pid));
   return child.pid;
 }
 
 const input = parse(process.argv);
 if (!input.dir) {
   console.error(
-    "Usage: node preflight-question.mjs --dir <session-dir> [--port <free-port>] --branch B1 [--reset-response] [--open]",
+    "Usage: node preflight-question.mjs --dir <canonical-task-dir> [--port <free-port>] --branch B1 [--reset-response] [--open]",
   );
   process.exit(1);
 }
 
-const root = resolveSessionDir(input.dir);
+const root = resolveTaskDir(input.dir);
 const page = path.join(root, "questions", `question-${input.branch}.html`);
 const response = path.join(root, `response-${input.branch}.json`);
 const portFile = path.join(root, "save-server.port");

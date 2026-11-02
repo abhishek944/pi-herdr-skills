@@ -1,18 +1,20 @@
 # UI/UX grill-me visual decision tree
 
-The conductor maintains this artifact at `var/<feature-name>/ui-ux-grill-me/<session-slug>/visual-decision-tree.md`.
+The conductor maintains this artifact in the owning canonical task directory: `<taskDir>/visual-decision-tree.md`, where `<taskDir>` is `var/<sessionId>/<workId>/<taskId>/` for a root owner or the nested delegated triple beneath the exact parent task directory. Feature names, session slugs and owner labels are descriptive metadata only and never select a directory.
 
 ## DAG template
 
-Create `dag.md` in the parent session before questions. The parent owns it and the aggregate tree; owner sessions contain local trees and original responses.
+Create `dag.md` in the parent's task directory before questions. The parent owns it and the aggregate tree; each owner's canonical task directory contains its local tree and original responses.
 
 ```markdown
-# Interview DAG — <parent-slug>
+# Interview DAG — <parent label>
 
-| Branch | Todo/local ID | Outcome / closure criteria | Dependencies | Level | Owner | Session / owned boundary | Status | Evidence |
-| ------ | ------------- | -------------------------- | ------------ | ----- | ----- | ------------------------ | ------ | -------- |
-| <owner-slug>:B1 | <actual ID> | <decision plus all follow-ups closed> | — | 1 | <owner> | <unique flat owner session> | pending | — |
-| integrate-L1 | <actual ID> | Verify artifacts and reconcile level | <level-1 branches> | 1 | parent | <aggregate files only> | pending | — |
+Parent task directory: `<taskDir>` (root owner directory or its delegated nested triple).
+
+| Branch | Todo/local ID | Outcome / closure criteria | Dependencies | Level | Owner | Owner task directory | Status | Evidence |
+| ------ | ------------- | -------------------------- | ------------ | ----- | ----- | -------------------- | ------ | -------- |
+| <owner-label>:B1 | <actual ID> | <decision plus all follow-ups closed> | — | 1 | <owner label> | <canonical owner task directory> | pending | — |
+| integrate-L1 | <actual ID> | Verify artifacts and reconcile level | <level-1 branches> | 1 | parent | <parent task directory> | pending | — |
 
 ## Level gates
 
@@ -20,18 +22,20 @@ Create `dag.md` in the parent session before questions. The parent owns it and t
 - L2: <branches requiring verified L1 decisions>
 ```
 
-Dependency IDs must exist and the graph must be acyclic. Keep readiness/status here, not in a second scheduler. A completed interview Todo records a verified disposition, not necessarily a resolved decision: a deferred prerequisite requires re-scoping or deferring downstream branches. Each owner records local parent-child links and reports discovered dependencies; only the parent updates shared DAG/Todos. Preserve qualified IDs and original paths during merge and handoff.
+Dependency IDs must exist and the graph must be acyclic. Keep readiness/status here, not in a second scheduler. A completed interview Todo records a verified disposition, not necessarily a resolved decision: a deferred prerequisite requires re-scoping or deferring downstream branches. Record every owner's exact task directory and display label from its assignment; the label qualifies branch IDs, while the directory locates the original evidence. Each owner records local parent-child links and reports discovered dependencies; only the parent updates shared DAG/Todos. Preserve qualified IDs and original paths during merge and handoff; never rebuild an owner path from a feature name, slug or label.
 
 ## Template
 
 ```markdown
-# Visual decision tree — <session-slug>
+# Visual decision tree — <owner label>
+
+Owner task directory: `<taskDir>`.
 
 ## Brief
 
 - Surface: <page or component>
 - Scope: <hero | nav | full page | …>
-- Parent grill-me slug: <slug or none>
+- Parent Grill Me task directory: <path or none>
 - Constraints: …
 - Success criteria: …
 
@@ -49,15 +53,15 @@ Dependency IDs must exist and the graph must be acyclic. Keep readiness/status h
 
 ## Open branches
 
-| Qualified ID | Branch | Axis | Level | Owner session | Status | Depends on |
-| ------------ | ------ | ---- | ----- | ------------- | ------ | ---------- |
-| <owner-slug>:B1 | Hero layout | layout | 1 | <owner-slug> | open | <verified foundations> |
+| Qualified ID | Branch | Axis | Level | Owner label | Owner task directory | Status | Depends on |
+| ------------ | ------ | ---- | ----- | ----------- | -------------------- | ------ | ---------- |
+| <owner-label>:B1 | Hero layout | layout | 1 | <owner-label> | <canonical owner task directory> | open | <verified foundations> |
 
 ## Resolved branches
 
 | ID  | Choice | Variant id(s) | Why | Evidence          |
 | --- | ------ | ---------- | --- | ----------------- |
-| <owner-slug>:B1 | … | B or none | … | original owner selection-B1.json and screenshot/source paths |
+| <owner-label>:B1 | … | B or none | … | original owner selection-B1.json and screenshot/source paths |
 
 ## Deferred
 
@@ -71,7 +75,7 @@ Dependency IDs must exist and the graph must be acyclic. Keep readiness/status h
 
 - [ ] Shared design/interaction foundations resolved before independent axes
 - [ ] Every level integration gate verified in dag.md
-- [ ] Owner trees merged with qualified IDs and original screenshot/source/selection paths
+- [ ] Owner trees merged with qualified IDs and original screenshot/source/selection paths, copied unchanged from each owner's canonical task directory
 - [ ] Every owner save server/Monitor cleaned up
 - [ ] Every open branch closed or deferred
 - [ ] No contradictory resolved decisions
@@ -91,7 +95,7 @@ Dependency IDs must exist and the graph must be acyclic. Keep readiness/status h
 2. **One comparison per owner** — each owner opens a separate visible browser interview, waits for feedback, and follows local children automatically. Browser tabs/windows across owners may compete; artifact directories, ports and mutable capture state must not.
 3. **Current first** — option A is always the captured baseline unless user requests otherwise.
 4. **One axis per branch** — e.g. layout OR CTA prominence, not both.
-5. **Record feedback JSON** — keep local helper IDs `B<n>` and qualify them as `<owner-slug>:B<n>` in the aggregate tree. Read `selectedIds`, `selectedLabels`, `visualContracts`, and `why` from `selection-B<n>.json`, falling back to legacy scalar fields only when arrays are absent. Preserve all selections and source paths. Multiple selected variants keep the branch open for synthesis: clarify how parts combine and get acceptance of a coherent combined browser-rendered candidate in a single-select follow-up before moving it to Resolved. If `submissionType` is `comments-only`, keep the branch open/rework-needed with variant `none` until a revised choice is accepted or the user explicitly defers it. Only user-approved deferrals enter Deferred; they do not satisfy required decision dependencies.
+5. **Record feedback JSON** — keep local helper IDs `B<n>` and qualify them as `<owner-label>:B<n>` in the aggregate tree. Read `selectedIds`, `selectedLabels`, `visualContracts`, and `why` from `selection-B<n>.json`, falling back to legacy scalar fields only when arrays are absent. Preserve all selections and source paths. Multiple selected variants keep the branch open for synthesis: clarify how parts combine and get acceptance of a coherent combined browser-rendered candidate in a single-select follow-up before moving it to Resolved. If `submissionType` is `comments-only`, keep the branch open/rework-needed with variant `none` until a revised choice is accepted or the user explicitly defers it. Only user-approved deferrals enter Deferred; they do not satisfy required decision dependencies.
 6. **Deferral is explicit** — do not skip branches silently.
 
 ## Branch quality bar

@@ -35,14 +35,14 @@ When available, use `WorkCreate`/`WorkUpdate` and `TodoCreate`/`TodoUpdate` to k
 
 ## Optional diagram handoff
 
-When competing architectures, workflows, or state models are easier to compare visually, read and follow the global `archify` skill. Pass the feature name, decision, distinct options, verified current-source evidence, and assumptions. Keep the source-backed current-state diagram separate from each proposed option. Proposed diagrams must be description-backed, clearly labeled proposals without `meta.repository` or citations asserting unimplemented behavior; retain current-source evidence and assumptions in the decision notes. Preserve differences and uncertainty instead of implying consensus. Reuse the current work and todo; keep diagram artifacts under `var/<feature-name>/archify-details/` and link them from the decision notes. Archify does not choose the design or authorize implementation. Keep ordinary tradeoff tables and narrative reports in `visual-explainer`.
+When competing architectures, workflows, or state models are easier to compare visually, read and follow the global `archify` skill. Pass the feature name, decision, distinct options, verified current-source evidence, and assumptions. Keep the source-backed current-state diagram separate from each proposed option. Proposed diagrams must be description-backed, clearly labeled proposals without `meta.repository` or citations asserting unimplemented behavior; retain current-source evidence and assumptions in the decision notes. Preserve differences and uncertainty instead of implying consensus. Reuse the current work and todo; keep diagrams inside the canonical owning task directory from global `implement` and link their exact original paths from the decision notes. Archify does not choose the design or authorize implementation. Keep ordinary tradeoff tables and narrative reports in `visual-explainer`.
 
 ## Files
 
-When notes should be retained, write only under:
+When notes should be retained, follow global `implement` and write only inside the owning task's canonical directory (`taskDir`). Reuse the caller's task for the same outcome; standalone work establishes real session/Work/Task ownership first. Delegated work appends its own IDs below the exact supplied parent task directory, not a feature-named root.
 
 ```text
-var/<feature-name>/design-council-details/
+<taskDir>/decision.md
 ```
 
 Use simple readable files such as `brief.md`, `perspectives.md`, and `decision.md`. Do not create runtime logs or machine state.

@@ -6,6 +6,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { openSystemBrowser } from "./open-system-browser.mjs";
+import { resolveTaskDir, resolveWriteTarget } from "./task-dir.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const saveServer = path.join(here, "save-server.mjs");
@@ -74,8 +75,9 @@ function readPort(portFile) {
 }
 
 function startServer(root, requestedPort, portFile) {
+  const logFile = resolveWriteTarget(root, "save-server.log");
+  const pidFile = resolveWriteTarget(root, "save-server.pid");
   fs.rmSync(portFile, { force: true });
-  const logFile = path.join(root, "save-server.log");
   const output = fs.openSync(logFile, "a");
   const child = spawn(
     process.execPath,
@@ -84,19 +86,19 @@ function startServer(root, requestedPort, portFile) {
   );
   fs.closeSync(output);
   child.unref();
-  fs.writeFileSync(path.join(root, "save-server.pid"), String(child.pid));
+  fs.writeFileSync(pidFile, String(child.pid));
   console.log(`Started save-server (pid ${child.pid}) → ${logFile}`);
 }
 
 const input = parseArgs(process.argv);
 if (!input.dir) {
   console.error(
-    "Usage: node preflight-comparison.mjs --dir <session-dir> [--port <free-port>] --branch B1 [--reset-selection] [--open]",
+    "Usage: node preflight-comparison.mjs --dir <canonical-task-dir> [--port <free-port>] --branch B1 [--reset-selection] [--open]",
   );
   process.exit(1);
 }
 
-const root = path.resolve(input.dir);
+const root = resolveTaskDir(input.dir);
 const comparisonRel = `comparisons/comparison-${input.branch}.html`;
 const comparisonPath = path.join(root, comparisonRel);
 const selectionPath = path.join(root, `selection-${input.branch}.json`);

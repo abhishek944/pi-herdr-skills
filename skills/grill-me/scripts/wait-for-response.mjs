@@ -2,7 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { resolveSessionDir } from "./session-path.mjs";
+import { resolveTaskDir } from "./task-dir.mjs";
 
 function parse(argv) {
   const out = { dir: "", branch: "B1", timeout: 1800, interval: 500 };
@@ -19,12 +19,12 @@ function parse(argv) {
 const input = parse(process.argv);
 if (!input.dir || input.timeout <= 0) {
   console.error(
-    "Usage: node wait-for-response.mjs --dir <session-dir> --branch B1 [--timeout 1800]",
+    "Usage: node wait-for-response.mjs --dir <canonical-task-dir> --branch B1 [--timeout 1800]",
   );
   process.exit(1);
 }
 const output = path.join(
-  resolveSessionDir(input.dir),
+  resolveTaskDir(input.dir),
   `response-${input.branch}.json`,
 );
 const deadline = Date.now() + input.timeout * 1000;

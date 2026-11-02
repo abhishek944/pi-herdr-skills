@@ -1,10 +1,10 @@
 {
   "snapshot": "2026-09-11",
-  "skills": 21,
+  "skills": 24,
   "files": [
     {
       "path": "skills/agent-review/SKILL.md",
-      "sha256": "9659cb4bc2b2751893f43d0e97ae5c01aa225eb5b448a94ad59d8f6d1470f9c8",
+      "sha256": "e5c7f8cad3ce0909db00b7720d7cc67aa945ca80057be166b7326ea946469fe8",
       "executable": false
     },
     {
@@ -19,7 +19,7 @@
     },
     {
       "path": "skills/archify/SKILL.md",
-      "sha256": "a338438980dbf461727ea75a0ab02e672903dc03a9ef5f895302905405f2d954",
+      "sha256": "f2246ef29fd28041e59e8d13136f7415835fba8806b24883f6144c7f58a4cc27",
       "executable": false
     },
     {
@@ -543,8 +543,28 @@
       "executable": false
     },
     {
+      "path": "skills/awesome-logging-standards/LICENSE",
+      "sha256": "e9cf09486af0e8966d6ad3c1e886177cfbe69e735ade0c25021d70d40ac94e0b",
+      "executable": false
+    },
+    {
+      "path": "skills/awesome-logging-standards/PROVENANCE.md",
+      "sha256": "8597284992b7d53b694126969e23ee4f6cccfead649253b40312133922059e48",
+      "executable": false
+    },
+    {
+      "path": "skills/awesome-logging-standards/SKILL.md",
+      "sha256": "69f4142d06952020e422e2bee334e8e220d060fb6cd9d193c15128c7a42a13c0",
+      "executable": false
+    },
+    {
       "path": "skills/browser-use/SKILL.md",
-      "sha256": "f42fc1b8f5242e5e193d9a509af4b22d56f6856ff70091c007b4d28897b314fc",
+      "sha256": "45449ad671c4594514d0a3d5f1f06235f3045b7eb9b51b0fa5a921822a3f0015",
+      "executable": false
+    },
+    {
+      "path": "skills/browser-use/scripts/headless.py",
+      "sha256": "6ef223a40c841abf42dd9d44d392479448e214d2ed334b61657c100f114d3371",
       "executable": false
     },
     {
@@ -559,37 +579,42 @@
     },
     {
       "path": "skills/codebase-design/SKILL.md",
-      "sha256": "ca1c1234e873c0e67eaf54390c40f3fd5e8feecf6e9293a7f428d99b1cceeebc",
+      "sha256": "e83ea6d703a2b0aa90dab0a25c548be356276923b8b09b600718bf5bf9fee545",
       "executable": false
     },
     {
       "path": "skills/commit-and-merge/SKILL.md",
-      "sha256": "f37bf936d5ef167baf1b02f721c00edd8e6cd721e4d9dac4f29d49d90f1547d4",
+      "sha256": "cccbb2220d141a61738d5b15c0f2898915e528b84bc59b1de47dcc4e2c2d864f",
       "executable": false
     },
     {
       "path": "skills/computer-use/SKILL.md",
-      "sha256": "49e7c13a3ae39553e7bcedc0750b65252270c0c96cd1e83ffd4392d3ea79dfa1",
+      "sha256": "3bcf1e10b50349c5c53f0a72b27e3399fb249762839027148cab685648f74242",
       "executable": false
     },
     {
       "path": "skills/design-council/SKILL.md",
-      "sha256": "7f6fce627f0047a07c9ff118690b1ad51920b69780675550b7e434be7ff99274",
+      "sha256": "888e341e0831954c604f21e9a179f739a638bdfeaeeac800584926e5d0213f17",
+      "executable": false
+    },
+    {
+      "path": "skills/firstmate/SKILL.md",
+      "sha256": "9e4784c7926d86b341d4df30eee923a93db01e6a1bb111c620846366d09ce301",
       "executable": false
     },
     {
       "path": "skills/grill-me/SKILL.md",
-      "sha256": "99cc5a13c95d9d98d7f9f61fd857e43cf2b330423908be9f8e439d60a9bcf80a",
+      "sha256": "75d4276b249bbb0a97c52490771d62c9c154d2b64b51ae6a4ab4a347f8242e04",
       "executable": false
     },
     {
       "path": "skills/grill-me/references/decision-tree.md",
-      "sha256": "d2bac13897aca3351b0778b2c64b23afcd89e4904769b9033a2032e1a35ab855",
+      "sha256": "982dbe4f8b00f845abb20277a5f2d8a2ce78ae55b9898d96ecc0ad5ed6f60c73",
       "executable": false
     },
     {
       "path": "skills/grill-me/scripts/generate-question.mjs",
-      "sha256": "5d8d1bb1072ef50f959a98038b950cc24e3ddcd8b18f97759ef636299c964344",
+      "sha256": "48d392ad427851dcf35c44e8c1246825f355291b6675425cbabad26dc8d90dee",
       "executable": true
     },
     {
@@ -599,47 +624,47 @@
     },
     {
       "path": "skills/grill-me/scripts/preflight-question.mjs",
-      "sha256": "cc605c746a28ecd3584057aa2cf23bc21ad0a3fe36594caa4dd668f60e853d13",
+      "sha256": "e1ae165e1051ed1cb1743c6c2dba7fff52e3c5f7fb8e7144f0b3ba37bf4a3821",
       "executable": true
     },
     {
       "path": "skills/grill-me/scripts/save-server.mjs",
-      "sha256": "f5d0c2f514816e79375414d524ffa3f105912dfd23bc757fa2015613496d042d",
-      "executable": true
-    },
-    {
-      "path": "skills/grill-me/scripts/session-path.mjs",
-      "sha256": "bc692d0d6548ebe4b3b6f306501c686e39b6d3076d86c9477460984591076f2d",
+      "sha256": "03073136e4d04f2ae562737aa8d38b8bc90548b46a542871002ac32d5128ae14",
       "executable": true
     },
     {
       "path": "skills/grill-me/scripts/stop-server.mjs",
-      "sha256": "db4da9bc4b04c174916f1e235bb42de77b5fdb9c8f2dbbd6ffde20843fb57ed5",
+      "sha256": "534e535ccfe63e55af0c265e3605164f969527332197e99391c7a9d705b22c7b",
       "executable": true
     },
     {
-      "path": "skills/grill-me/scripts/wait-for-response.mjs",
-      "sha256": "d5a5f2c305d6863df4203f098a009d0a57f4753a687e33e7c5174e1fb05dfb61",
-      "executable": true
-    },
-    {
-      "path": "skills/herdr/SKILL.md",
-      "sha256": "522db4cc3111973a57adb05b382e3da3ac72e684e64128964aacc1bf9c1f552a",
+      "path": "skills/grill-me/scripts/task-dir.mjs",
+      "sha256": "06ef73f9e2255d760c1112db7036d28825f27f3ce3bc38739f8af6718b863784",
       "executable": false
     },
     {
+      "path": "skills/grill-me/scripts/wait-for-response.mjs",
+      "sha256": "711c573421849b34972208176fd8cd5764a70c066490a800602c7e5433807875",
+      "executable": true
+    },
+    {
       "path": "skills/implement/SKILL.md",
-      "sha256": "4bf622f348be9de27cde5ff5ca1cccf011b76e164bc7c91ac00e329c183da251",
+      "sha256": "9218932b3dbeb33e0b4c38f6038fedce781ee506895c52b793bb7556f55bce5d",
       "executable": false
     },
     {
       "path": "skills/model-routing-policy/SKILL.md",
-      "sha256": "4cb06630a2c6ed589eab8d0153497364aaba401d5180d8e486c31dcb2cd681c0",
+      "sha256": "cedb15a3458221c5a2186ab60a50aec9ab84575f38294006478bbb1a67498a2a",
       "executable": false
     },
     {
       "path": "skills/next-feature/SKILL.md",
-      "sha256": "04e514d2646f6d1e76f049166a7a01d0aecd61faa495130d93f96607a7e42a9e",
+      "sha256": "08993f9a8344f067da0f8d1350a47ad130b469b598711767d1aa39ced5460de0",
+      "executable": false
+    },
+    {
+      "path": "skills/no-arbitrary-limits/SKILL.md",
+      "sha256": "0f7a2dab39e2d9522fa41762b8570ca98ced6a2b76dbd962ed2665868b8a8117",
       "executable": false
     },
     {
@@ -649,12 +674,12 @@
     },
     {
       "path": "skills/read-flows/SKILL.md",
-      "sha256": "6f36934626a879dde1416cbafed5c639dab181a6b7c4d540cef3ba3358901670",
+      "sha256": "4124b7a8bcd703f23aa24d96a3b26c42b77424ce0836e26aee7900754c77966b",
       "executable": false
     },
     {
       "path": "skills/research/SKILL.md",
-      "sha256": "36d44cb861cfe5dd8a807a367007c5cc563f8fe0c25428476e264dee47327fdb",
+      "sha256": "407dc57019fdb854f6cd4c076c32747e60355d882bfe99b74b22f2cd826575f5",
       "executable": false
     },
     {
@@ -663,33 +688,133 @@
       "executable": false
     },
     {
+      "path": "skills/security-audit/AI-AND-LLM.md",
+      "sha256": "7335a95c43554eadefcf03ece639291bb0e038c398a179299e3887ffe06bd2ef",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/ATTACK-CLASSES.md",
+      "sha256": "3ee4f00c6e8c9dcf6dd02dd5ac2a4ceb322e2085f3e9fbe79cf0c6330bc7ef83",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/CLIENT-SIDE.md",
+      "sha256": "613f6b98f86083e045525c5b60154ffdab122bac35f1e05eb17488e6e453370c",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/CLOUD-AND-DEPLOYMENT.md",
+      "sha256": "3c80f3088be22345e07b057c056d6ed99fe2b0304f794398964f7ccd5a496ca3",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/DATA-ISOLATION-AND-LIFECYCLE.md",
+      "sha256": "307dcb3e24d292715c4a041190e7bb135646a37eb6187619ae01d000a634a4ad",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/DESKTOP-MOBILE-AND-LOCAL-IPC.md",
+      "sha256": "58eae8ee0ca6a46611c501ec5a3ab47fdff88dd7db0d8d74789bbf8bb19d8cb2",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/HUNTING.md",
+      "sha256": "c1cbbcfa1c82c5dcf9d679b759ca3e94b64d7fd775816541d25372dc63793441",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/LICENSE",
+      "sha256": "e598e694aa506650c7192d5ea3be0e50aca0d356ea00551c53429f0b01eb6391",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/MEMORY-SAFETY-AND-BINARY.md",
+      "sha256": "7c8b0dccfb35315cca2455509674d49632b2fe37e1f3aac16c1a496a7e9924a7",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/PROTOCOLS-RPC-AND-MESSAGING.md",
+      "sha256": "8b73816fa5b3697c9c40977f0c836b40f01d6e81929ff2720fe83ce089e9a619",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/PROVENANCE.md",
+      "sha256": "33806b0537a4ed00e3ad247e7dd446e6286f079b79a12424f9e0e48a46194ea3",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/RECONNAISSANCE.md",
+      "sha256": "ee97e8ec57e7935394d8116398799e531ad56f30b618a016a9db022fe89ee99d",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/RESOURCE-EXHAUSTION-AND-AVAILABILITY.md",
+      "sha256": "4326fab5c92a0b4c420a70196254040105cd794026562130b59bf1a6db3e4baa",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/SKILL.md",
+      "sha256": "add57672f0150aa591a630e0f23bc4e5322940bca6100fd27cf4b1e5b9e85cd1",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/SUPPLY-CHAIN-AND-RELEASE.md",
+      "sha256": "f372e919940e335468ba1ae09f99026c3986a345f7fe26f8068f132e199f52a5",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/VALIDATION-AND-REPORTING.md",
+      "sha256": "91c64dbfdf0e6fcdd9a22b86d06e2de4ea6f3599afe1968a6b118a6b176ec1b8",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/WEB-PROTOCOL-AND-AUTH.md",
+      "sha256": "4f3066dffa23c5635859187be9b96c32f2aff29a688186b91ff0c63e47d62b5c",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/report-schema.json",
+      "sha256": "6575c9de4a62255699ea052ebf9a49ebfb373a32891bcd89af6f55cc84b35519",
+      "executable": false
+    },
+    {
+      "path": "skills/security-audit/validate-coverage-ledger.cjs",
+      "sha256": "74b22408a2d3ddfb511505c57c9ec00e11edad5e140fe2f66a81be4d3e07abcf",
+      "executable": true
+    },
+    {
+      "path": "skills/security-audit/validate-findings.cjs",
+      "sha256": "e85f232e36bfac0f866f244da50376692d6b45c690beadcb00608b0e6c8b5283",
+      "executable": true
+    },
+    {
       "path": "skills/talk-human/SKILL.md",
       "sha256": "dd86ced467127221b069d04cc2bea98b4c623b4abbe7f049eefd75734d378699",
       "executable": false
     },
     {
       "path": "skills/ui-ux-grill-me/SKILL.md",
-      "sha256": "c5910523c7b1c3c5fb957376c3973c34d1c03bdf2aa171d4bc7cea7e3f905f85",
+      "sha256": "4d3aaa79c2e8f139ca18200df7673afb6021ba65b0a0a50fd2532c4d7f5b7534",
       "executable": false
     },
     {
       "path": "skills/ui-ux-grill-me/references/visual-contract.md",
-      "sha256": "4bb7be2251f91edc955e670b91985f7f9b692ed15978497ed5ef65b7060ffb20",
+      "sha256": "419af6cde427e326c4f716c63c2682feea6059ebba91bc4c244d8c2cc1512cad",
       "executable": false
     },
     {
       "path": "skills/ui-ux-grill-me/references/visual-decision-tree.md",
-      "sha256": "17f17cfa38548eb2f81b8d45d8da4f8e38ba6179c0241306869163889401ba3f",
+      "sha256": "6dc46a33813b91bd6e1ea78fb7ade07e2f170be67b8147700410c4f2dadc66a6",
       "executable": false
     },
     {
       "path": "skills/ui-ux-grill-me/scripts/capture-viewport.mjs",
-      "sha256": "53695a4c754df1a0d5ab355d2dc160096041e647c0275674577a2f078c92e99d",
+      "sha256": "a25aa7ee5adc8f7ba7c4eac50233f84d6fb6703163b949f213843363d94cd752",
       "executable": true
     },
     {
       "path": "skills/ui-ux-grill-me/scripts/generate-comparison.mjs",
-      "sha256": "397a21cf67119909da08067864fa25cc2de1be8e3e1c03278ab195cd965dbf81",
+      "sha256": "387f6358b3808ad8fa5a3b41febac051d7e7bc474bc36802ef098a2fcdc91e17",
       "executable": true
     },
     {
@@ -699,22 +824,27 @@
     },
     {
       "path": "skills/ui-ux-grill-me/scripts/preflight-comparison.mjs",
-      "sha256": "9ce561ca7fe39e3cfb01055f9df23813c0d77e617de2ca9861099227194b351d",
+      "sha256": "b8e5544307bde47049272185cec5a8739882b5a524847970c5056026c2cd8273",
       "executable": true
     },
     {
       "path": "skills/ui-ux-grill-me/scripts/save-server.mjs",
-      "sha256": "ba717bd7160efff2be3892e58a9d9bd892fdf9542f0219520ed298b2c42068f6",
+      "sha256": "ba7c34a7ef3032a884c2f98fe09f364cc99cf53992fe685fc56424ee8ae8e71c",
       "executable": true
     },
     {
       "path": "skills/ui-ux-grill-me/scripts/stop-server.mjs",
-      "sha256": "7123c1628bf9f4bbf640864e0aefbc2cd1ff530112aa2918bbc3a1dbf1a07b4f",
+      "sha256": "249bf6a5ed8bae260c38765b6116390875c2c4401d471032f0eb2b1e850438b9",
       "executable": true
     },
     {
+      "path": "skills/ui-ux-grill-me/scripts/task-dir.mjs",
+      "sha256": "533f7dcf455d1df14a732d2d1e8909dc5ca372dc652fe5dc366dd6f8fdfc9de1",
+      "executable": false
+    },
+    {
       "path": "skills/ui-ux-grill-me/scripts/wait-for-selection.mjs",
-      "sha256": "69c6e38c6cd80f695658cbd959b3256b8446a87e1b35f6f40acdcfc68193fca7",
+      "sha256": "a4396b4c37ca5e1da151f973156fd53896c3ed7c3b3b74eda30e17555f7d7062",
       "executable": true
     },
     {
@@ -724,7 +854,7 @@
     },
     {
       "path": "skills/ui-ux-testing/SKILL.md",
-      "sha256": "6c50383481564847b52491e1f53fadac0c994e650924694f9c38c45d14025697",
+      "sha256": "58e237fffd3996758c2396c01df4fba4baa57b28a8619afb06bda59e0a770074",
       "executable": false
     },
     {
@@ -734,7 +864,7 @@
     },
     {
       "path": "skills/visual-explainer/SKILL.md",
-      "sha256": "c2307df89adc4b285401e0bc4352777ac87420e9f5d21e5cfd9a6f98734f38d5",
+      "sha256": "a64c6ddf9bb808550f3b0cdbd52c8857f17778c1a5bc1a37ff7e0d5129dfc566",
       "executable": false
     }
   ]

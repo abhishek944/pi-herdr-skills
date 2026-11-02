@@ -4,10 +4,15 @@
  *
  * Usage:
  *   node generate-comparison.mjs \
- *     --feature landing-page --session landing-improve \
+ *     --dir var/<sessionId>/<Wn>/<Tn> \
+ *     --label b1 \
  *     --branch B1 \
  *     --question "Which hero layout?" \
- *     --options path/to/options.json
+ *     --options questions/B1-options.json
+ *
+ * --dir is the owner's canonical task directory (a root task directory, or the
+ * nested delegated triple beneath the exact parent task directory). All
+ * comparison, screenshot, mockup and provenance paths resolve inside it.
  *
  * options.json:
  * {
@@ -27,19 +32,20 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { insideTaskDir, resolveTaskDir, resolveWriteTarget, taskLabel } from "./task-dir.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 function parseArgs(argv) {
   const out = {
-    feature: "",
-    session: "",
+    dir: "",
+    label: "",
     branch: "B1",
     question: "",
     options: "",
   };
   for (let i = 2; i < argv.length; i++) {
-    if (argv[i] === "--feature" && argv[i + 1]) out.feature = argv[++i];
-    else if (argv[i] === "--session" && argv[i + 1]) out.session = argv[++i];
+    if (argv[i] === "--dir" && argv[i + 1]) out.dir = argv[++i];
+    else if (argv[i] === "--label" && argv[i + 1]) out.label = argv[++i];
     else if (argv[i] === "--branch" && argv[i + 1]) out.branch = argv[++i];
     else if (argv[i] === "--question" && argv[i + 1]) out.question = argv[++i];
     else if (argv[i] === "--options" && argv[i + 1]) out.options = argv[++i];
@@ -60,17 +66,14 @@ function toDataUri(filePath) {
   return `data:${mime};base64,${b64}`;
 }
 
-function mockupIframeSrc(sessionDir, mockupHtml) {
-  const full = path.isAbsolute(mockupHtml)
-    ? mockupHtml
-    : path.join(sessionDir, mockupHtml);
-  if (!fs.existsSync(full)) return null;
-  const rel = path.relative(sessionDir, full).split(path.sep).join("/");
-  return `/${rel}`;
+function mockupIframeSrc(taskDir, mockupHtml) {
+  const found = insideTaskDir(taskDir, mockupHtml);
+  if (!found) return null;
+  return `/${found.relative.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-function readMockupFrame(sessionDir, mockupHtml, label) {
-  const src = mockupIframeSrc(sessionDir, mockupHtml);
+function readMockupFrame(taskDir, mockupHtml, label) {
+  const src = mockupIframeSrc(taskDir, mockupHtml);
   if (!src) return '<div class="mockup-missing">Mockup missing</div>';
   return `<iframe class="mockup-iframe" src="${escapeHtml(src)}" title="${escapeHtml(label || "Variant mockup")}" loading="lazy"></iframe>`;
 }
@@ -84,39 +87,17 @@ function escapeHtml(s) {
 }
 
 const args = parseArgs(process.argv);
-const kebab = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-if (
-  !kebab.test(args.feature) ||
-  !kebab.test(args.session) ||
-  !args.question ||
-  !args.options
-) {
+if (!args.dir || !args.question || !args.options) {
   console.error(
-    'Usage: node generate-comparison.mjs --feature <feature-name> --session <slug> --branch B1 --question "..." --options <json>',
+    'Usage: node generate-comparison.mjs --dir <canonical-task-dir> [--label <owner-label>] --branch B1 --question "..." --options <json>',
   );
   process.exit(1);
 }
 
-const sessionDir = path.resolve(
-  process.cwd(),
-  "var",
-  args.feature,
-  "ui-ux-grill-me",
-  args.session,
-);
-const featureRoot = path.resolve(
-  process.cwd(),
-  "var",
-  args.feature,
-  "ui-ux-grill-me",
-);
-if (!sessionDir.startsWith(`${featureRoot}${path.sep}`)) {
-  throw new Error(
-    "Session path must stay inside the feature's ui-ux-grill-me folder",
-  );
-}
-const comparisonsDir = path.join(sessionDir, "comparisons");
-fs.mkdirSync(comparisonsDir, { recursive: true });
+const taskDir = resolveTaskDir(args.dir, { requireExisting: false });
+const label = args.label.trim() || taskLabel(taskDir);
+const taskDirRelative =
+  path.relative(process.cwd(), taskDir).split(path.sep).join("/") || ".";
 
 const configPath = path.isAbsolute(args.options)
   ? args.options
@@ -193,23 +174,23 @@ if (provenanceErrors.length) {
 const sourceArtifacts = Object.fromEntries(
   config.options.map((option) => {
     if (option.source.kind === "live-route") return [option.id, null];
-    const sourcePath = path.resolve(sessionDir, option.source.path);
-    if (!sourcePath.startsWith(`${sessionDir}${path.sep}`) || !fs.statSync(sourcePath, { throwIfNoEntry: false })?.isFile()) {
-      throw new Error(`${option.id}: mockup source must be a file inside the UI/UX session`);
+    const found = insideTaskDir(taskDir, option.source.path);
+    if (!found || !fs.statSync(found.path, { throwIfNoEntry: false })?.isFile()) {
+      throw new Error(`${option.id}: mockup source must be a file inside the owner task directory`);
     }
     return [option.id, {
-      path: path.relative(process.cwd(), sourcePath).split(path.sep).join("/"),
-      sha256: crypto.createHash("sha256").update(fs.readFileSync(sourcePath)).digest("hex"),
+      path: path.relative(process.cwd(), found.path).split(path.sep).join("/"),
+      sha256: crypto.createHash("sha256").update(fs.readFileSync(found.path)).digest("hex"),
     }];
   }),
 );
 
 const missingScreenshots = config.options
-  .filter((option) => !fs.existsSync(path.join(sessionDir, option.image)))
+  .filter((option) => !insideTaskDir(taskDir, option.image))
   .map((option) => `${option.id}: ${option.image}`);
 if (missingScreenshots.length) {
   throw new Error(
-    `Missing option screenshots: ${missingScreenshots.join(", ")}`,
+    `Missing option screenshots or paths outside the owner task directory: ${missingScreenshots.join(", ")}`,
   );
 }
 const recommended = config.recommended || config.options[0]?.id || "A";
@@ -238,12 +219,12 @@ const optionCards = config.options
           : "Current";
     let visual = "";
     if (opt.image) {
-      const uri = toDataUri(path.join(sessionDir, opt.image));
+      const uri = toDataUri(path.join(taskDir, opt.image));
       visual = uri
         ? `<img src="${uri}" alt="${escapeHtml(opt.label)}" class="shot" />`
         : `<div class="mockup-missing">Screenshot missing: ${escapeHtml(opt.image)}</div>`;
     } else if (opt.mockupHtml) {
-      visual = readMockupFrame(sessionDir, opt.mockupHtml, opt.label);
+      visual = readMockupFrame(taskDir, opt.mockupHtml, opt.label);
     } else if (opt.mockupInline) {
       visual = `<div class="mockup-frame">${opt.mockupInline}</div>`;
     }
@@ -463,7 +444,7 @@ const html = `<!DOCTYPE html>
 </head>
 <body>
   <div class="wrap">
-    <p class="eyebrow">ui-ux-grill-me · ${escapeHtml(args.session)} · ${escapeHtml(args.branch)}</p>
+    <p class="eyebrow">ui-ux-grill-me · ${escapeHtml(label)} · ${escapeHtml(args.branch)}</p>
     <h1>${escapeHtml(args.question)}</h1>
     <p class="meta">${multiple ? "Select all compatible directions that apply. Use comments to explain how they should combine." : "Choose one variant."} Leave all choices unselected and submit comments if none feel right.</p>
     <form id="form">
@@ -578,7 +559,9 @@ const html = `<!DOCTYPE html>
       status.textContent = "Saving…";
       const payload = {
         questionId: ${JSON.stringify(args.branch)},
-        sessionSlug: ${JSON.stringify(args.session)},
+        sessionSlug: ${JSON.stringify(label)},
+        ownerLabel: ${JSON.stringify(label)},
+        taskDir: ${JSON.stringify(taskDirRelative)},
         selectionMode: ${JSON.stringify(selectionMode)},
         selectedIds,
         selectedLabels: selectedIds.map(id => labels[id] || id),
@@ -610,6 +593,10 @@ const html = `<!DOCTYPE html>
 </body>
 </html>`;
 
-const outFile = path.join(comparisonsDir, `comparison-${args.branch}.html`);
+const outFile = resolveWriteTarget(
+  taskDir,
+  path.join("comparisons", `comparison-${args.branch}.html`),
+);
+fs.mkdirSync(path.dirname(outFile), { recursive: true });
 fs.writeFileSync(outFile, html);
 console.log(`Wrote ${outFile}`);
