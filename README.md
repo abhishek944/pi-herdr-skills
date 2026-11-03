@@ -1,3 +1,6 @@
+> **Moved to Astack**
+> This repository is archived and read-only. Development is maintained in the [Astack monorepo](https://github.com/abhishek944/astack); see [skills/pi-herdr-skills](https://github.com/abhishek944/astack/tree/main/skills/pi-herdr-skills).
+
 # pi-herdr-skills
 
 A portable collection of global [Pi](https://pi.dev/) skills for planning, implementation, review, browser and desktop work, visual explanations, and [Herdr](https://herdr.dev/)-hosted Pi agents.
