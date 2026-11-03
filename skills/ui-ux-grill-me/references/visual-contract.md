@@ -12,7 +12,7 @@ For every resolved visual branch, preserve:
 - the session image-generation art-direction reference, its prompt record, and
   the visual choices carried from it into the selected candidate;
 - the viewport size and relevant interaction state;
-- `selection-B<n>.json`, including the user's rationale and modifications;
+- the unchanged validated answer copied to `response-B<n>.json`, its original returned `responsePath`, and skill-owned `selection-B<n>.json` containing the trusted provenance join and the user's rationale;
 - the parent `dag.md` and aggregate `visual-decision-tree.md`, including verified level gates, qualified branch IDs and the parent Grill Me task directory;
 - each owner task directory's local tree and original screenshot, source and selection paths (do not flatten or rename colliding B<n> files; hand off exact paths rather than reconstructing them from labels).
 
@@ -24,7 +24,7 @@ details) may differ as long as the visible contract and behavior are preserved.
 
 ## Multiple selections
 
-With `selectionMode: "multiple"`, preserve `selectedIds`, `selectedLabels`, and every `visualContracts` entry from the original response. Each entry retains its screenshot, source, source artifact, and shared comparison contract. Legacy singular fields are null when more than one choice is selected; this is not comments-only rejection.
+With `mode: "multiple"`, preserve the validated answer’s `selectedIds`, `selectedLabels`, and `response`, plus every `visualContracts` entry constructed by this skill from its private variant mapping. The tool does not generate contracts or scalar-answer aliases. Each skill-owned contract retains screenshot, source, source artifact/hash and shared comparison constraints. Several selections are not comments-only rejection.
 
 Multiple selected screenshots are not automatically one authoritative visual contract. Keep the branch open, clarify what to combine, resolve contradictions, and show a coherent combined browser-rendered candidate in a single-select follow-up for user acceptance. That accepted combined screenshot and source become authoritative; preserve original selections and user rationale as supporting evidence. Never silently pick the first selection or hand conflicting screenshots to implementation as an already resolved design.
 
@@ -50,25 +50,39 @@ explicit user decision may revise the visual contract.
 
 ## Candidate provenance
 
-Every option in `options-B<n>.json` must include:
+Keep a private variant-ID mapping before presenting choices. `templates/example-options.json` is an evidence template only, never a tool request. For every variant retain its complete absolute screenshot path plus source kind, location, viewport and route:
 
 ```json
 {
-  "image": "screenshots/B1-variant-B.png",
+  "id": "B",
+  "image": "/absolute/path/screenshots/B1-variant-B.png",
   "source": {
     "kind": "mockup-html",
-    "path": "mockups/B1-variant-B.html",
+    "path": "/absolute/path/mockups/B1-variant-B.html",
     "viewport": "1440x900",
     "route": null
+  },
+  "sourceArtifact": {
+    "path": "/absolute/path/mockups/B1-variant-B.html",
+    "sha256": "<SHA256 of the source file shown>"
   }
 }
 ```
 
-Use `kind: "live-route"` for a real application route. Every options file must
-also include a session-level `referenceImages` array pointing to the generated
-art-direction reference. The generated raster guides the variants but is not a
-selectable product UI candidate or an implementation source; the browser-rendered
-candidate remains the implementation reference.
+Use `kind: "live-route"` with the actual URL for application sources; `sourceArtifact` is null when there is no retained mockup file. Keep the shared contract and art-direction `referenceImages` provenance alongside the variant mapping. The generated raster guides variants but is not a selectable product UI or implementation source. This metadata stays private and is not passed to SubmitQuestion; only image content blocks with complete absolute paths are supplied for the screenshots.
+
+After collecting the normalized tool answer, archive an unchanged `response-B<n>.json` copy and build this separate skill-owned selection envelope:
+
+```json
+{
+  "answer": "<the unchanged normalized tool answer object>",
+  "responsePath": "<the exact responsePath returned by the tool>",
+  "privateVariantEvidence": "<absolute path to the pre-submission variant mapping>",
+  "visualContracts": []
+}
+```
+
+For each `answer.selectedIds` entry, join the ID to the original trusted variant record and construct a contract containing branch/question, variantId, label/category, screenshot, source, sourceArtifact and the shared constraints. Preserve displayed option order. Use `answer.response` for rationale and modifications. Browser feedback cannot supply or replace provenance. Comments-only feedback has an empty contract array and keeps the branch open. Question ID/revision and the recorded mapping must correspond to the exact presented choices.
 
 ## Implementation handoff
 

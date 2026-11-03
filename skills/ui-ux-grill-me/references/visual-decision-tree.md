@@ -76,7 +76,7 @@ Owner task directory: `<taskDir>`.
 - [ ] Shared design/interaction foundations resolved before independent axes
 - [ ] Every level integration gate verified in dag.md
 - [ ] Owner trees merged with qualified IDs and original screenshot/source/selection paths, copied unchanged from each owner's canonical task directory
-- [ ] Every owner save server/Monitor cleaned up
+- [ ] Every owner answer archived and question/watcher resources accounted for; no hosted evidence deleted before archival
 - [ ] Every open branch closed or deferred
 - [ ] No contradictory resolved decisions
 - [ ] Current UI captured before variants shown
@@ -92,10 +92,10 @@ Owner task directory: `<taskDir>`.
 ## Traversal rules
 
 1. **Level-based between owners, depth-first within an owner** — resolve shared foundations, dispatch ready independent axes concurrently, then integrate the level before advancing.
-2. **One comparison per owner** — each owner opens a separate visible browser interview, waits for feedback, and follows local children automatically. Browser tabs/windows across owners may compete; artifact directories, ports and mutable capture state must not.
+2. **One comparison per owner** — each owner opens a separate visible browser interview, waits for feedback, and follows local children automatically. Owners call WaitForAnswer and yield while pending; the watcher resumes the owning session. Browser tabs/windows across owners may compete; task directories, question identities and mutable capture state must not.
 3. **Current first** — option A is always the captured baseline unless user requests otherwise.
 4. **One axis per branch** — e.g. layout OR CTA prominence, not both.
-5. **Record feedback JSON** — keep local helper IDs `B<n>` and qualify them as `<owner-label>:B<n>` in the aggregate tree. Read `selectedIds`, `selectedLabels`, `visualContracts`, and `why` from `selection-B<n>.json`, falling back to legacy scalar fields only when arrays are absent. Preserve all selections and source paths. Multiple selected variants keep the branch open for synthesis: clarify how parts combine and get acceptance of a coherent combined browser-rendered candidate in a single-select follow-up before moving it to Resolved. If `submissionType` is `comments-only`, keep the branch open/rework-needed with variant `none` until a revised choice is accepted or the user explicitly defers it. Only user-approved deferrals enter Deferred; they do not satisfy required decision dependencies.
+5. **Record feedback JSON** — keep local branch IDs `B<n>`, safe session-unique tool IDs such as `<owner-label>-B1`, and qualified tree IDs `<owner-label>:B<n>`. Consume the validated answer at the returned `responsePath`, archive its unchanged copy as `response-B<n>.json`, and build skill-owned `selection-B<n>.json` with `answer`, `responsePath`, `privateVariantEvidence`, and `visualContracts`. Read selections and rationale from `answer.selectedIds`, `answer.selectedLabels`, and `answer.response`; reconstruct contracts from trusted private variant records, never browser-supplied fields. Preserve all selections and source paths. Multiple selected variants keep the branch open for synthesis: clarify how parts combine and get acceptance of a coherent combined browser-rendered candidate in a single-select follow-up before moving it to Resolved. If `submissionType` is `comments-only`, keep the branch open/rework-needed with variant `none` until a revised choice is accepted or the user explicitly defers it. Only user-approved deferrals enter Deferred; they do not satisfy required decision dependencies.
 6. **Deferral is explicit** — do not skip branches silently.
 
 ## Branch quality bar
@@ -105,10 +105,10 @@ Each comparison page should include:
 - Clear `[question]` headline matching the branch
 - Exactly 6 views: current baseline, 3 standard variants, and 2 out-of-the-box variants, each with a short label and one-line tradeoff
 - Embedded or linked visuals — **viewport PNG for every option** (required); iframe-only output is not accepted
-- Source provenance for every option: `live-route` or `mockup-html`, source path, viewport, and route when applicable
+- Private source provenance for every option: `live-route` or `mockup-html`, source path, viewport, route and source artifact/hash when applicable; keep this outside the tool request
 - Expand control for every viewport image
-- Recommended variant noted in `generate-comparison` config (`recommended` field)
-- Set `selectionMode: "multiple"` when compatible choices can coexist, otherwise `"single"` (default); record every selected variant rather than just the first
+- Recommended variant noted in the direct `SubmitQuestion` input (`recommended` field)
+- Set required `mode: "multiple"` when compatible choices can coexist, otherwise `"single"`; record every selected variant rather than just the first
 - Comments field that permits comments-only submission when no option is acceptable
 
 ## Suggested branch axes (landing page)

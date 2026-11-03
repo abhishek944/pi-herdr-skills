@@ -1,5 +1,4 @@
 {
-  "selectionMode": "single",
   "recommended": "A",
   "contract": {
     "route": "<ROUTE>",
@@ -7,14 +6,18 @@
     "interactionState": "<INTERACTION_STATE>",
     "theme": "<THEME>",
     "container": "<CONTAINER>",
-    "requiredBehavior": ["<REQUIRED_BEHAVIOR>"],
-    "accessibility": ["<ACCESSIBILITY_REQUIREMENT>"]
+    "requiredBehavior": [
+      "<REQUIRED_BEHAVIOR>"
+    ],
+    "accessibility": [
+      "<ACCESSIBILITY_REQUIREMENT>"
+    ]
   },
   "referenceImages": [
     {
       "role": "art-direction-reference",
-      "path": "references/imagegen-art-direction.png",
-      "promptRecord": "references/imagegen-art-direction.md"
+      "path": "/absolute/path/references/imagegen-art-direction.png",
+      "promptRecord": "/absolute/path/references/imagegen-art-direction.md"
     }
   ],
   "options": [
@@ -23,25 +26,30 @@
       "category": "baseline",
       "label": "Current (baseline screenshot)",
       "description": "Captured live UI — use as option A in every first branch.",
-      "image": "screenshots/B1-current.png",
+      "image": "/absolute/path/screenshots/B1-current.png",
       "source": {
         "kind": "live-route",
         "path": "http://localhost:<UI_PORT>/",
         "viewport": "<WIDTH>x<HEIGHT>",
         "route": "<ROUTE>"
-      }
+      },
+      "sourceArtifact": null
     },
     {
       "id": "B",
       "category": "standard",
       "label": "Variant B",
       "description": "One-line tradeoff for this layout/UX axis.",
-      "image": "screenshots/B1-variant-B.png",
+      "image": "/absolute/path/screenshots/B1-variant-B.png",
       "source": {
         "kind": "mockup-html",
-        "path": "mockups/B1-variant-B.html",
+        "path": "/absolute/path/mockups/B1-variant-B.html",
         "viewport": "<WIDTH>x<HEIGHT>",
         "route": null
+      },
+      "sourceArtifact": {
+        "path": "/absolute/path/mockups/B1-variant-B.html",
+        "sha256": "<SHA256_OF_SOURCE_FILE>"
       }
     },
     {
@@ -49,12 +57,16 @@
       "category": "standard",
       "label": "Variant C",
       "description": "Alternative tradeoff on the same axis only.",
-      "image": "screenshots/B1-variant-C.png",
+      "image": "/absolute/path/screenshots/B1-variant-C.png",
       "source": {
         "kind": "mockup-html",
-        "path": "mockups/B1-variant-C.html",
+        "path": "/absolute/path/mockups/B1-variant-C.html",
         "viewport": "<WIDTH>x<HEIGHT>",
         "route": null
+      },
+      "sourceArtifact": {
+        "path": "/absolute/path/mockups/B1-variant-C.html",
+        "sha256": "<SHA256_OF_SOURCE_FILE>"
       }
     },
     {
@@ -62,12 +74,16 @@
       "category": "standard",
       "label": "Variant D",
       "description": "A third practical direction on the same UX axis.",
-      "image": "screenshots/B1-variant-D.png",
+      "image": "/absolute/path/screenshots/B1-variant-D.png",
       "source": {
         "kind": "mockup-html",
-        "path": "mockups/B1-variant-D.html",
+        "path": "/absolute/path/mockups/B1-variant-D.html",
         "viewport": "<WIDTH>x<HEIGHT>",
         "route": null
+      },
+      "sourceArtifact": {
+        "path": "/absolute/path/mockups/B1-variant-D.html",
+        "sha256": "<SHA256_OF_SOURCE_FILE>"
       }
     },
     {
@@ -75,12 +91,16 @@
       "category": "out-of-the-box",
       "label": "Out-of-the-box E",
       "description": "A bold reframe that still addresses the same user need.",
-      "image": "screenshots/B1-variant-E.png",
+      "image": "/absolute/path/screenshots/B1-variant-E.png",
       "source": {
         "kind": "mockup-html",
-        "path": "mockups/B1-variant-E.html",
+        "path": "/absolute/path/mockups/B1-variant-E.html",
         "viewport": "<WIDTH>x<HEIGHT>",
         "route": null
+      },
+      "sourceArtifact": {
+        "path": "/absolute/path/mockups/B1-variant-E.html",
+        "sha256": "<SHA256_OF_SOURCE_FILE>"
       }
     },
     {
@@ -88,13 +108,18 @@
       "category": "out-of-the-box",
       "label": "Out-of-the-box F",
       "description": "A distinctly unconventional direction with a clear product rationale.",
-      "image": "screenshots/B1-variant-F.png",
+      "image": "/absolute/path/screenshots/B1-variant-F.png",
       "source": {
         "kind": "mockup-html",
-        "path": "mockups/B1-variant-F.html",
+        "path": "/absolute/path/mockups/B1-variant-F.html",
         "viewport": "<WIDTH>x<HEIGHT>",
         "route": null
+      },
+      "sourceArtifact": {
+        "path": "/absolute/path/mockups/B1-variant-F.html",
+        "sha256": "<SHA256_OF_SOURCE_FILE>"
       }
     }
-  ]
+  ],
+  "mode": "single"
 }

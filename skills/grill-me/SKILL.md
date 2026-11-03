@@ -1,7 +1,7 @@
 ---
 name: grill-me
 description: Browser-based visual interview that stress-tests a plan or design in dependency levels with parallel browser branch owners, explains core concepts with diagrams when useful, records each submitted response automatically, and continues without asking the user to type "continue". Use when the user says "grill me", wants plan decisions challenged, or wants shared understanding before implementation.
-compatibility: Requires Node.js, a browser, Herdr Core (hc), the Herdr app, and Core-hosted Pi agents.
+compatibility: Requires Pi 1.4-compatible pi-decisions and pi-loop-monitor extensions, Node.js, a browser, Herdr Core (hc), the Herdr app, and Core-hosted Pi agents.
 ---
 
 ## Helper-script boundary
@@ -9,6 +9,8 @@ compatibility: Requires Node.js, a browser, Herdr Core (hc), the Herdr app, and 
 Treat files inside any skill's `scripts/` directory as opaque executables during normal use. Never read, search, quote, summarize, or infer behavior from their source. Use only interfaces documented in `SKILL.md`, its references, or the helper's documented self-description command. If a helper fails, first determine from its response and documented interface whether the failure was clearly non-mutating. For a usage or validation error proven to have made no change, correct the invocation from those documented sources and retry. Continue correcting and retrying while each failure is clearly non-mutating and provides actionable validation feedback; do not stop merely because an earlier correction revealed another issue. Stop and report when the failure may have partially changed state, is destructive, involves credentials or authorization, becomes ambiguous, or cannot be corrected from the documented interface. The only exception to source inspection is when the user's latest request explicitly asks to inspect, debug, review, or modify that helper script itself.
 
 Resolve `<skill-root>` to the directory containing this `SKILL.md`. Keep the shell working directory at the repository root unless a step says otherwise.
+
+Interview delivery uses only the direct `SubmitQuestion` and `WaitForAnswer` tools from `@abhishek944/pi-decisions`. If either tool is unavailable, report the installation or reload blocker rather than using another interface or starting a server.
 
 ## Owner task directory
 
@@ -26,7 +28,7 @@ A delegated branch owner uses the exact `parentTaskDir` supplied in its assignme
 
 `<taskDir>` in the examples below means that exact owner directory. Feature names, owner labels and branch labels are metadata for the DAG, decision tree, page titles and qualified IDs; they never select or name a directory. If your own full session ID or real Work/Todo IDs are unavailable, stop and report the blocker instead of inventing a path.
 
-The helpers validate `--dir` before creating anything. They accept a canonical root or nested owner task directory inside the repository `var/` and reject feature-first or legacy folders, paths outside `var/`, `..` escapes, malformed IDs, and symlinked roots that resolve outside `var/`. A rejected root is a usage error, not a reason to fall back to a feature folder. Helper-owned write targets — generated pages, captures, saved responses and server pid/port/log files — are also resolved through existing aliases and rejected when they would escape the owner directory, before any directory or file is created.
+Skill-owned evidence and any helper outputs follow this artifact boundary. This is agent coordination, not a question-tool input requirement: SubmitQuestion receives content directly and resolves explicit media using complete absolute paths; it never receives or looks up the active task folder.
 
 Existing `var/<feature>/grill-me/...` folders are historical artifacts. Link them explicitly when a resolved decision needs them, but never use them as a new output root, and do not move or rename them without explicit user approval.
 
@@ -38,113 +40,73 @@ Before every commentary or final response, read ../talk-human/SKILL.md. It is th
 
 Stress-test a **plan or design** with the user before implementation. Act as conductor: plan a decision DAG, dispatch independent interview branches in parallel, and integrate each level before advancing. Grounding agents gather facts so questions ask only for genuine product or engineering judgment.
 
-Use a browser interview page for every branch. Keep the interaction model consistent with `ui-ux-grill-me`: one decision at a time per branch owner, concurrent independent browser interviews, visible options plus free-form feedback, automatic save on Submit, and automatic same-turn progression.
+Use a browser interview page for every branch. Keep the interaction model consistent with `ui-ux-grill-me`: one decision at a time per branch owner, concurrent independent browser interviews, visible options plus free-form feedback, automatic save on Submit, and automatic progression when the answer watcher wakes Pi.
 
 **Not for:** production debugging (use the globally installed `research` skill), multi-perspective debate (use global `design-council`), visual mockup comparison (use global `ui-ux-grill-me`), or committing and releasing changes.
 
 ## Hard rules
 
 - **Browser questions required** — do not use the client's terminal user-input feature when the local browser flow can run.
-- **Visible system browser required** — open human interview pages through the operating system's browser (`open` on macOS), never through Browser Use. Browser Use may run automated checks elsewhere, but it must not present grill-me questions.
+- **Human-visible URL required** — share the URL returned by `SubmitQuestion`. For local delivery, open it through the operating system's visible browser (`open` on macOS); for here.now, the user opens the shared HTTPS link on their own device. Browser Use is for automated checks, never a substitute for presenting human choices.
 - **Parallel branches, sequential local follow-ups** — independent owners may open separate browser interviews concurrently. Each owner opens one question at a time, records its answer, and closes its follow-up tree before returning.
-- **Keep the turn alive** — immediately run `wait-for-response.mjs` in the same turn after opening a question; never ask the user to type `continue`, and never substitute a chat question for the wait script.
-- **Keep the save server alive on a Monitor** — preflight starts the save server when needed. Immediately confirm it with `MonitorList`; if no monitor covers the save server, register it with `MonitorCreate` (with an `onDone` wake that re-checks the pending branch). Renew the inactivity timeout with `MonitorUpdate` during long waits. Never poll with shell sleep loops. Run `MonitorStop` only for the owner's own server Monitor after `stop-server.mjs` has run, on closure or before returning a blocker.
-- **Use an automatically assigned session port** — never choose or reuse a fixed port. Omit `--port` from preflight so the operating system assigns an unoccupied loopback port. Preflight persists it in `<taskDir>/save-server.port`, reuses it only for later branches of that same owner directory, and rejects explicit occupied ports.
-- **Automatic recording** — Submit must persist `response-B<n>.json`; record that response in the owner's local `decision-tree.md` before its next question; the parent merges verified results at the level gate.
+- **Automatic continuation required** — immediately call `WaitForAnswer` after presenting a question. If it returns waiting, verify its watcher is registered and yield while the owning task is blocked on user input; the monitor wakes Pi when an answer or actionable error arrives. Never ask the user to type `continue` and never resolve a branch from a waiting receipt.
+- **One delivery owner** — pi-decisions owns the local server or here.now Site Data mapping, answer archive, and question watcher; pi-loop-monitor owns background execution and wake delivery. Do not start legacy save servers or model-facing polling loops alongside these tools. Check `MonitorList` for actual watcher state; a failed monitor is not a user response.
+- **Configured backend** — global Pi settings select `"pi-decisions": {"backend":"local"}` (the default) or explicitly `"here.now"`. Local mode assigns a loopback port automatically. Do not override the user's choice or silently fall back between local and hosted delivery. Hosted pages must contain only the intended non-sensitive interview assets, never the whole task directory.
+- **Automatic recording** — the tool archives the answer at its returned `responsePath`. After collecting it, archive an unchanged skill-owned copy as `response-B<n>.json` in the owner artifact directory and record it in the local decision tree before the next question; the parent verifies these copies at the level gate.
 - **Recommended answer required** — put the evidence-backed recommendation first and mark it recommended.
-- **Visualize core concepts** — when relationships, state, sequence, hierarchy, or tradeoffs are materially clearer visually, include a Mermaid diagram, focused HTML visual, or image on the question page. Skip decoration-only visuals.
+- **Visualize core concepts** — when relationships, state, sequence, hierarchy, or tradeoffs are materially clearer visually, include a Mermaid diagram or image content block on the question page. Skip decoration-only visuals.
 - **Ground before asking** — use evidence from the repository, schema, logs, runtime, and official external sources. Ask the user only for judgment calls or unresolved choices.
-- **Canonical owner directory** — write interview artifacts only inside your own owner task directory, passing it as `--dir` (see [Owner task directory](#owner-task-directory)). Feature names, owner labels and branch labels are metadata only.
+- **Canonical owner directory** — write skill-owned interview evidence only inside your own owner task directory (see [Owner task directory](#owner-task-directory)). Do not pass it to the question tools. Referenced media uses complete absolute paths. Feature names, owner labels and branch labels are metadata only.
 - **No implicit legacy resume** — never reopen or write into `var/grill-me/` or any feature-first session folder; treat existing ones as historical evidence and migrate a session only after explicit approval and only when the destination is absent.
 - **No fake consensus** — keep unresolved branches open or explicitly defer them.
-- **Separate concept visuals from UI variants** — Mermaid, inline HTML, and images in this skill explain a plan; they are not implementation candidates. Send visual UI decisions to the globally installed `ui-ux-grill-me` skill.
+- **Separate concept visuals from UI variants** — Mermaid and image content blocks in this skill explain a plan; they are not implementation candidates. Send visual UI decisions to the globally installed `ui-ux-grill-me` skill.
 - **Global handoffs only** — global skill handoffs are allowed, but do not hard-code or require repository-only skill names or agent role names.
 - **Automatic implementation handoff** — invoking this skill authorizes the parent to continue into implementation of the resolved scope after every branch is verified resolved or explicitly deferred and final integration is complete. Do not ask for another plan approval, implementation permission, or `continue`. Start global `ui-ux-grill-me` first when visual decisions are needed; otherwise start global `implement` in the same turn. Honor explicit planning-only or stop instructions, keep real blockers open, and do not implement deferred scope. Interview owners remain read-only on production code; the parent exits interview mode before implementation. Other action permissions remain unchanged.
 
 ## Browser question page
 
-For each branch `B<n>`:
-
-1. Create `<taskDir>/questions/B<n>-options.json`:
+For each branch `B<n>`, submit the content directly. Use a session-unique safe question ID such as `<owner-label>-B1`; display-qualified branch IDs such as `<owner-label>:B1` remain decision-tree metadata, not filenames.
 
 ```json
 {
-  "context": "Why this choice matters, grounded in evidence.",
-  "selectionMode": "single",
+  "questionId": "<owner-label>-B1",
+  "mode": "single",
+  "question": "Which boundary should own this behavior?",
+  "label": "<owner-label>",
+  "content": [
+    { "type": "text", "text": "Why this choice matters, grounded in evidence." },
+    { "type": "mermaid", "code": "flowchart LR\nA[Current state] --> B{Decision}\nB --> C[Option A]\nB --> D[Option B]" }
+  ],
   "recommended": "A",
-  "visual": {
-    "type": "mermaid",
-    "content": "flowchart LR\n  A[Current state] --> B{Decision}\n  B --> C[Option A]\n  B --> D[Option B]"
-  },
   "options": [
-    {
-      "id": "A",
-      "label": "Recommended direction",
-      "description": "Main benefit and tradeoff."
-    },
-    {
-      "id": "B",
-      "label": "Alternative",
-      "description": "When this is preferable."
-    },
-    {
-      "id": "D",
-      "label": "Defer",
-      "description": "Dependency required before deciding."
-    }
+    { "id": "A", "label": "Recommended direction", "content": [{ "type": "text", "text": "Main benefit and tradeoff." }] },
+    { "id": "B", "label": "Alternative", "content": [{ "type": "text", "text": "When this is preferable." }] },
+    { "id": "D", "label": "Defer", "content": [{ "type": "text", "text": "Dependency required before deciding." }] }
   ]
 }
 ```
 
-`visual` is optional. Supported types:
+Use 2–6 options as this skill's interview policy, not a tool quota. Set `mode: "single"` for mutually exclusive alternatives and `"multiple"` for compatible choices that can coexist; it is required, not inferred. Keep incompatible alternatives or a mutually exclusive Defer choice in a separate single-choice question. Use `mode: "review"` without options/recommendation only when open-ended feedback is the intended interaction.
 
-- `mermaid` — static architecture, flow, state, or sequence diagrams.
-- `html` — a focused inline visual when Mermaid cannot express the concept.
-- `image` — an existing PNG/JPG under the session directory.
+General and option-level `content` use the same ordered blocks: `{type:"text",text}`, `{type:"image",path,alt,caption?}`, `{type:"video",path,caption?}`, or `{type:"mermaid",code,caption?}`. Media `path` values must be complete absolute filesystem paths. No task folder, options file, raw HTML, or delivery setting is passed to either tool. Use images or Mermaid for concept visuals; render an HTML explanation into an image if needed rather than submitting HTML.
 
-Use 2–6 options. Set `selectionMode` per question: `"single"` (default) for mutually exclusive alternatives; `"multiple"` for compatible choices such as capabilities, requirements, or priorities that can coexist. The AI should choose multiple when the decision benefits from selecting more than one option; do not force the user to describe combinations in comments. The page shows radio buttons for single and checkboxes for multiple. Keep incompatible alternatives or a mutually exclusive Defer choice in a separate single-select question rather than mixing them into an additive set.
+1. Call `SubmitQuestion` with the direct object. It returns the actual URL, response path and state path. Save the returned `responsePath` as the answer location; do not infer it from a task directory. Identical immutable content reuses the question; revised content requires a fresh question ID.
+2. Verify the returned page is reachable and share its URL. Open local URLs in the visible system browser. For hosted pages, send the URL to the user; opening a browser on the remote machine does not present it on the user's device.
+3. Immediately call `WaitForAnswer`:
 
-Saved responses include `selectionMode` plus `selectedIds` and `selectedLabels` arrays in displayed option order. Use these arrays as the answer; fall back to legacy `selected`/`label` only when arrays are absent in an older session. Compatibility scalar fields are populated only for exactly one choice, otherwise null. `submissionType: "selection"` means one or more choices; comments-only has empty arrays. Record every selected choice and follow up on conflicts before resolving the branch.
-
-Free-form response is always available, including comments-only rejection. After choosing one or more options, **Clear selection** removes all choices without erasing written feedback and focuses the response field. Submit remains enabled only when an option is selected or non-empty feedback is present.
-
-2. Generate the page. `<taskDir>` is the owner's canonical task directory; `--label` is optional display metadata and defaults to the owner task ID:
-
-```bash
-node <skill-root>/scripts/generate-question.mjs \
-  --dir <taskDir> \
-  --label <owner-label> \
-  --branch B1 \
-  --question "Which boundary should own this behavior?" \
-  --options <taskDir>/questions/B1-options.json
+```json
+{ "questionId": "<owner-label>-B1" }
 ```
 
-3. Preflight and open it. Never open an unverified page:
+An existing answer returns immediately. Otherwise verify the returned watcher through `MonitorList`, mark the interview task blocked awaiting the browser answer, and yield. On its wake, resume and call `WaitForAnswer` again to obtain the archived answer. A monitor exit or save acknowledgement is not itself an answer; do not poll with repeated model turns.
+4. Use the validated returned answer or read the exact returned `responsePath`. Preserve `mode`, all `selectedIds`/`selectedLabels`, `submissionType`, and the user's `response`. Copy that normalized answer unchanged into the owner's `response-B<n>.json` as skill-owned evidence, record its original response path, and update the local decision tree before the next question. The extension does not write this skill evidence file on Submit.
+5. Record every selected choice in displayed option order. Comments-only feedback has empty arrays and nonblank `response`; it keeps the branch open for rework. Resolve conflicting selections before closing the branch. There are no scalar-answer fallbacks.
 
-```bash
-node <skill-root>/scripts/preflight-question.mjs \
-  --dir <taskDir> \
-  --branch B1 \
-  --reset-response \
-  --open
-```
+Free-form feedback is always available. Clear selection removes choices without erasing comments. Choice-mode submission needs a choice or nonblank comments; review needs nonblank comments.
 
-Preflight must print the automatically assigned port and confirm HTTP 200. It starts the save server when needed and stores the port in `<taskDir>/save-server.port`. Do not pass `--port` during normal use.
+Runtime question state is internal to pi-decisions and independent of skill artifact directories. After reload/reopening, recheck/re-arm supported pending questions; classic monitors do not survive shutdown/session switching. Questions saved in a removed format must be resubmitted with fresh IDs; do not migrate or delete historical files implicitly. Keep Pi running while waiting; stopped machines cannot be woken.
 
-4. Immediately wait in the active turn (mandatory — this is how answers are collected):
-
-```bash
-node <skill-root>/scripts/wait-for-response.mjs \
-  --dir <taskDir> \
-  --branch B1 \
-  --timeout 1800
-```
-
-This step is required, not optional. Do not replace it with a chat question: a browser Submit is the only thing that writes `response-B<n>.json`. Keep the save-server Monitor active while waiting. When the wait returns, parse `response-B1.json`, update the decision tree, and continue to the next branch automatically. On timeout, verify the server is still reachable (`MonitorList` + HTTP 200), renew with `MonitorUpdate`, and wait again — never treat a timeout as an answer and never skip to chat.
-
-Do not open pages via `file://`; response saving requires the HTTP save server.
-
-Saved responses keep `selectionMode`, `selectedIds`, `selectedLabels`, the legacy scalar `selected`/`label` compatibility fields and `submissionType`. They also record provenance metadata: `taskDir` (the repository-relative owner directory), `ownerLabel`, and the optional descriptive `sessionSlug`. That metadata never selects a directory.
+Before any explicitly authorized hosted-site deletion, preserve the answer and required visuals independently. The extension owns local process/watcher cleanup; never run a separate server or stop unrelated monitors.
 
 ## DAG and parallel branch ownership
 
@@ -152,7 +114,7 @@ Before opening the first question, the parent creates `dag.md` beside `decision-
 
 1. Group independent ready branches into levels. A branch is ready only when required decisions are verified resolved and the previous level's integration is complete. A deferred dependency does not satisfy a required decision: explicitly re-scope or defer its dependents. Shared choices must be dependencies, not parallel guesses.
 2. Dispatch independent branches concurrently through the Herdr policy below. Delegate substantial follow-up trees; keep trivial clarifications with the parent without serializing independent owners. Each owner has authority to open its own visible browser pages and ask the user directly. Concurrent browser tabs/windows are intentional; no shared-browser bottleneck or extra parent approval for each follow-up.
-3. Every interviewer, including the parent handling a trivial branch, works in one canonical owner task directory. The parent uses the grill-me owner directory; a delegated owner uses its assignment's exact `parentTaskDir` plus its own `<sessionId>/<workId>/<taskId>` triple. Give every owner a short **label**, such as `b1`, used only in page titles and qualified IDs; a label never selects a directory. Each owner gets its own save server, automatically assigned port, Monitor and owner directory. Keep helper IDs `B<n>` local; use `<owner-label>:B<n>` in the shared DAG/tree so parallel `B1` responses cannot collide. Show the owner/decision and level in question titles.
+3. Every interviewer, including the parent handling a trivial branch, works in one canonical owner task directory. The parent uses the grill-me owner directory; a delegated owner uses its assignment's exact `parentTaskDir` plus its own `<sessionId>/<workId>/<taskId>` triple. Give every owner a short **label**, such as `b1`, used only in page titles and qualified IDs; a label never selects a directory. Each owner uses its own task directory and pinned question records; pi-decisions handles the selected delivery backend and watcher lifecycle. Keep branch IDs `B<n>` local and use `<owner-label>:B<n>` in the shared DAG/tree. Use safe session-unique tool question IDs such as `<owner-label>-B1`; question storage is not scoped by task directory. Show the owner/decision and level in question titles.
 4. The owner runs the existing browser workflow, records every `response-B<n>.json`, then follows its answer-driven children sequentially within that owner (for example A → A1 → A2). Keep local IDs stable and record parent-child links in its local tree. No new agents or edits to other owners' files. If a child needs another owner's decision, return an explicit dependency/blocker rather than guessing or waiting on the sibling.
 5. An owner returns only when its entire assigned tree is resolved or explicitly deferred, or a real blocker prevents closure. Return decisions/rationale, child links, acceptance criteria, its canonical task directory and session/Work/Task IDs, original response/evidence paths, user-approved deferred reasons/revisit conditions, blockers/cross-branch dependencies, and resource cleanup status. Comments-only rejection requires rework, not resolution. A timeout or agent completion is not a user answer.
 6. The parent reads each complete result and original artifacts before marking its DAG row/Todo completed. Record resolved/deferred disposition separately from task completion; deferred decisions are not implementation requirements. Mark partial/failed owners blocked and keep the next level pending. Merge child branches into the aggregate tree with qualified IDs and original artifact paths.
@@ -165,7 +127,7 @@ When invoked as an assigned branch owner, skip parent intake, shared DAG creatio
 
 For human interviews, choose a prompt-and-wait deadline long enough for the browser waits and follow-ups; the 15-minute runtime minimum is not a completion budget. A deadline never resolves a branch: preserve pending evidence and resume it explicitly.
 
-Include the decision scope, level/dependencies, inherited verified decisions, closure criteria, feature name, owner label, real session/Work/Task IDs, the exact parent task directory, owned/forbidden paths, helper interfaces and browser authority in the prompt. Require the owner to create its own tracking and canonical nested task directory, and authorize follow-up questions, local tree/response writes, and its own server/Monitor lifecycle, while keeping production code read-only. State that it must close only resources it created, preserve evidence, not update parent tracking, not spawn agents, and return the complete branch result above. Evidence-only agents remain read-only and do not interview the user.
+Include the decision scope, level/dependencies, inherited verified decisions, closure criteria, feature name, owner label, real session/Work/Task IDs, the exact parent task directory, owned/forbidden paths, helper interfaces and browser authority in the prompt. Require the owner to create its own tracking and canonical nested task directory, and authorize follow-up questions, local tree/response writes, and its own pi-decisions question/watcher lifecycle, while keeping production code read-only. State that it must close only resources it created, preserve evidence, not update parent tracking, not spawn agents, and return the complete branch result above. Evidence-only agents remain read-only and do not interview the user.
 
 ## Independent-agent policy
 
@@ -218,21 +180,14 @@ global `grill-me` plan decisions → global `ui-ux-grill-me` visual contract whe
 
 Record shared understanding, resolved decisions, deferred decisions, evidence, remaining risks, and the automatic handoff below. This closeout is not a stopping point: after cleanup, continue into the next skill in the same turn unless explicitly limited to planning or genuinely blocked.
 
-Each owner stops only its own save server after its final response is recorded or before returning a blocker. The parent verifies every owner directory's cleanup and closes only its owned Herdr resources after collecting results. If an owner exits without cleanup, recover only its assigned owner directory through `stop-server.mjs`, then stop its server Monitor; never kill an unrelated or guessed process:
-
-```bash
-node <skill-root>/scripts/stop-server.mjs \
-  --dir <taskDir>
-```
-
-The server also shuts itself down after two idle hours. Port `0` lets the operating system atomically assign an unoccupied port for each new owner. Preflight verifies the persisted port still serves the same owner task directory, so another interview cannot silently reuse it.
+Verify that every accepted answer is archived in its owning task directory and every pending interview is resolved, deferred, or explicitly blocked. pi-decisions owns local resource cleanup and watcher identity; stop only resources belonging to that owner. Keep hosted evidence until it has been archived and deletion is explicitly authorized. Do not run separate server cleanup helpers against a pi-decisions-owned process.
 
 ## Loop limits
 
 - One open browser question per owner, not globally; independent owner browsers run concurrently.
 - No artificial question cap — interview until every branch of the design tree is resolved or explicitly deferred; nothing left silently assumed.
 
-If the browser page cannot run, stop the save server and block the interview.
+If the returned interview URL or answer watcher cannot run, preserve pending artifacts and block the interview with the concrete error. Do not silently switch delivery backends.
 
 ## External grounding
 

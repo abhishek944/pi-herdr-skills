@@ -1,6 +1,6 @@
 {
   "snapshot": "2026-09-11",
-  "skills": 24,
+  "skills": 23,
   "files": [
     {
       "path": "skills/agent-review/SKILL.md",
@@ -598,18 +598,13 @@
       "executable": false
     },
     {
-      "path": "skills/firstmate/SKILL.md",
-      "sha256": "9e4784c7926d86b341d4df30eee923a93db01e6a1bb111c620846366d09ce301",
-      "executable": false
-    },
-    {
       "path": "skills/grill-me/SKILL.md",
-      "sha256": "75d4276b249bbb0a97c52490771d62c9c154d2b64b51ae6a4ab4a347f8242e04",
+      "sha256": "71e9ada4b7b91582627f93faf5962d87b0fc44329ea9c5169fee79549c148aae",
       "executable": false
     },
     {
       "path": "skills/grill-me/references/decision-tree.md",
-      "sha256": "982dbe4f8b00f845abb20277a5f2d8a2ce78ae55b9898d96ecc0ad5ed6f60c73",
+      "sha256": "8901b92a271d4ee413ad7e18ac3eea15757526284ec241bf5217f2b4bd95025f",
       "executable": false
     },
     {
@@ -794,17 +789,17 @@
     },
     {
       "path": "skills/ui-ux-grill-me/SKILL.md",
-      "sha256": "4d3aaa79c2e8f139ca18200df7673afb6021ba65b0a0a50fd2532c4d7f5b7534",
+      "sha256": "714b3c988c961dd7a5b2b0c80f3377c8bd7374a1ef7698344a4f25300f8bccd8",
       "executable": false
     },
     {
       "path": "skills/ui-ux-grill-me/references/visual-contract.md",
-      "sha256": "419af6cde427e326c4f716c63c2682feea6059ebba91bc4c244d8c2cc1512cad",
+      "sha256": "b3210905b253dcb5782ff6d6761fb66351ef933a826b3b4bdb541041363d6211",
       "executable": false
     },
     {
       "path": "skills/ui-ux-grill-me/references/visual-decision-tree.md",
-      "sha256": "6dc46a33813b91bd6e1ea78fb7ade07e2f170be67b8147700410c4f2dadc66a6",
+      "sha256": "7d039b96ed5ab86d0fcc3e1f4504a1298ee17b6b1e6e215800c3c7607dd77cfb",
       "executable": false
     },
     {
@@ -849,7 +844,7 @@
     },
     {
       "path": "skills/ui-ux-grill-me/templates/example-options.json",
-      "sha256": "1f9f32f85ea35b6a9d10fb313c10438f96fd52c481319c36aaa91f1596166728",
+      "sha256": "3b8cdf5aba63d48cb6cb41dc19021fc249c11d3eb848b009c5b594d1b8714002",
       "executable": false
     },
     {

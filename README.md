@@ -67,7 +67,6 @@ If an installed skill was modified, uninstall refuses to remove it unless you ad
 | `codebase-design` | Guides module responsibilities, explicit interfaces, justified abstractions, and version-aware TypeScript/Effect contracts. |
 | `computer-use` | Operates desktop apps through local Cua Driver MCP with grounded input, screenshot forwarding, and verified outcomes. |
 | `design-council` | Compares architecture, API, workflow, and product-design options without editing. |
-| `firstmate` | Keeps a primary session in a coordinator role: conversation, decisions and quick inspection stay local while project execution is delegated. |
 | `research` | Investigates and debugs a repository without applying a fix. |
 | `security-audit` | Cloudflare's source-first security guidance and evidence-led audit workflow, with independent validation and structured reports. |
 | `next-feature` | Autonomously recommends what to build next from real user problems, web evidence, product fit, and code-grounded sizing. |
@@ -134,20 +133,17 @@ When a skill needs retained notes, screenshots, reports or HTML, it reuses the c
 
 ### First Mate coordinator mode
 
-`firstmate` keeps the main conversation in a coordinator role: conversation, decisions, quick inspection and final reporting stay local, while project edits, substantial investigation, builds and verification are delegated through the existing `implement`, `herdr`, and pi-tasks workflow. Saying "implement this" does not leave the role. It is behavioral guidance, not a sandbox, permission gate or elapsed-time classifier, and it blocks no tools.
+The standalone `pi-firstmate` package now bundles the First Mate extension and `firstmate` skill. They are no longer installed or maintained by this repository. Install the package from its own checkout, then reload Pi:
 
-The companion extension is not installed by `scripts/install.sh`, which installs skills only. Register it once in personal settings and keep the repository checkout available, because the extension reads its policy from `skills/firstmate/SKILL.md` through a module-relative path:
-
-```json
-{
-  "extensions": ["/absolute/path/to/pi-herdr-skills/extensions/firstmate/index.ts"],
-  "pi-firstmate": { "enabled": false }
-}
+```bash
+pi install /path/to/pi-firstmate
 ```
 
-`pi-firstmate.enabled` defaults to `false` when omitted. A trusted project `.pi/settings.json` can override it. `/firstmate on` and `/firstmate off` set a session-only override, `/firstmate default` clears it, and `/firstmate status` reports the effective state, configured default and worker suppression. The override is stored in the session and is not inherited by forked or new sessions.
+Keep `"pi-firstmate": { "enabled": false }` in personal settings for a default-off coordinator, or set it to `true` for default-on. `/firstmate on|off` overrides the current session; `/firstmate status` reports the mode and `/firstmate default` clears the override. Conversation, decisions and quick checks stay local while substantial project execution uses whichever authorized subagent orchestration is available. Pi-herdr supplies Agent tools when installed; it is not a mandatory First Mate dependency. First Mate creates no agents itself and blocks no tools.
 
-Worker sessions started by pi-herdr `AgentCreate` are recognized from their verified Core `pi.task` and `pi.session` labels, so coordinator guidance stays off there even when the default is on. `/firstmate on` in a worker explains the suppression instead of restricting it. A malformed settings section is reported and treated as off rather than silently enabling the mode. Reload or restart Pi after registering the extension, then run `/firstmate on`. See [`config/firstmate.example.json`](config/firstmate.example.json) for the settings section.
+Pi-herdr workers are recognized by Core labels. Other launchers should pass `--firstmate-worker` to child Pi processes when sharing a default-on configuration; unknown orchestration workers cannot be identified automatically without a marker. See the pi-firstmate README for the integration contract.
+
+When upgrading from the embedded version, remove its old direct extension-path registration if present. Inspect and back up `~/.agents/skills/firstmate/`, then remove that duplicate only after verifying the package-owned skill loads. The installer does not automatically remove retired skill directories. Keep unrelated global skills and configuration.
 
 ## Permission gates
 
